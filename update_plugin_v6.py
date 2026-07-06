@@ -1,35 +1,14 @@
-import logging
-import os
-import aiofiles
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+import json
 
-_LOGGER = logging.getLogger(__name__)
+# 1. Update manifest.json
+with open("custom_components/fullstacksecurity/manifest.json", "r") as f:
+    manifest = json.load(f)
+manifest["version"] = "1.0.6"
+with open("custom_components/fullstacksecurity/manifest.json", "w") as f:
+    json.dump(manifest, f, indent=2)
 
-DOMAIN = "fullstacksecurity"
-PLATFORMS = ["alarm_control_panel"]
-
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up the FullStackSecurity component."""
-    hass.data.setdefault(DOMAIN, {})
-    return True
-
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up FullStackSecurity from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    
-    # Pre-import to avoid blocking call warning in HA core
-    import custom_components.fullstacksecurity.alarm_control_panel
-    
-    # ULTIMATE FIX: Write the JS file directly to the user's config/www directory
-    try:
-        www_dir = hass.config.path("www")
-        if not os.path.exists(www_dir):
-            os.makedirs(www_dir)
-            
-        js_path = os.path.join(www_dir, "fullstacksecurity-card.js")
-        
-        js_content = """class FullStackSecurityCard extends HTMLElement {
+# 2. Rewrite __init__.py
+js_code = """class FullStackSecurityCard extends HTMLElement {
   set panel(panel) {
     this._panel = panel;
     if (panel && panel.config) {
@@ -275,6 +254,39 @@ window.customCards.push({
   description: "A custom card and panel for the FullStack Security plugin."
 });
 """
+
+init_content = f"""import logging
+import os
+import aiofiles
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+
+_LOGGER = logging.getLogger(__name__)
+
+DOMAIN = "fullstacksecurity"
+PLATFORMS = ["alarm_control_panel"]
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    \"\"\"Set up the FullStackSecurity component.\"\"\"
+    hass.data.setdefault(DOMAIN, {{}})
+    return True
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    \"\"\"Set up FullStackSecurity from a config entry.\"\"\"
+    hass.data.setdefault(DOMAIN, {{}})
+    
+    # Pre-import to avoid blocking call warning in HA core
+    import custom_components.fullstacksecurity.alarm_control_panel
+    
+    # ULTIMATE FIX: Write the JS file directly to the user's config/www directory
+    try:
+        www_dir = hass.config.path("www")
+        if not os.path.exists(www_dir):
+            os.makedirs(www_dir)
+            
+        js_path = os.path.join(www_dir, "fullstacksecurity-card.js")
+        
+        js_content = \"\"\"{js_code}\"\"\"
         
         async with aiofiles.open(js_path, "w") as f:
             await f.write(js_content)
@@ -294,12 +306,16 @@ window.customCards.push({
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
+    \"\"\"Unload a config entry.\"\"\"
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry when options change."""
+    \"\"\"Reload config entry when options change.\"\"\"
     await hass.config_entries.async_reload(entry.entry_id)
+"""
+
+with open("custom_components/fullstacksecurity/__init__.py", "w") as f:
+    f.write(init_content)
