@@ -1,22 +1,4 @@
-import logging
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.components.http import HomeAssistantView
-from homeassistant.components.frontend import async_register_built_in_panel, async_remove_panel
-from aiohttp import web
-
-_LOGGER = logging.getLogger(__name__)
-
-DOMAIN = "fullstacksecurity"
-PLATFORMS = ["alarm_control_panel"]
-
-class FullStackSecurityCardView(HomeAssistantView):
-    url = "/fullstacksecurity_card/fullstacksecurity-card.js"
-    name = "fullstacksecurity_card"
-    requires_auth = False
-
-    async def get(self, request):
-        js = """class FullStackSecurityCard extends HTMLElement {
+class FullStackSecurityCard extends HTMLElement {
   set panel(panel) {
     this._panel = panel;
     if (panel && panel.config) {
@@ -218,7 +200,7 @@ class FullStackSecurityCardView(HomeAssistantView):
 
   updateStatus(state) {
     let statusText = state.toUpperCase().replace('_', ' ');
-    let color = '#4ade80'; // Green
+    let color = '#4ade80'; 
     let btnText = "DISARM";
     this.mainContainer.style.animation = 'none';
     
@@ -226,12 +208,12 @@ class FullStackSecurityCardView(HomeAssistantView):
       color = '#4ade80';
       btnText = "ARM SYSTEM";
     } else if (state === 'arming') {
-      color = '#fbbf24'; // Yellow
+      color = '#fbbf24'; 
       statusText = "ARMING...";
     } else if (state === 'armed_away') {
-      color = '#f87171'; // Red
+      color = '#f87171'; 
     } else if (state === 'triggered') {
-      color = '#ef4444'; // Bright Red
+      color = '#ef4444'; 
       statusText = "ALARM TRIGGERED!";
       this.mainContainer.style.animation = 'triggeredGlow 2s infinite';
     }
@@ -241,10 +223,10 @@ class FullStackSecurityCardView(HomeAssistantView):
     this.actionBtn.innerText = btnText;
     
     if (btnText.startsWith("ARM")) {
-      this.actionBtn.style.background = '#f87171'; // Red button to arm
+      this.actionBtn.style.background = '#f87171'; 
       this.actionBtn.style.color = '#fff';
     } else {
-      this.actionBtn.style.background = '#4ade80'; // Green button to disarm
+      this.actionBtn.style.background = '#4ade80'; 
       this.actionBtn.style.color = '#000';
     }
   }
@@ -262,66 +244,3 @@ window.customCards.push({
   preview: true,
   description: "A custom card and panel for the FullStack Security plugin."
 });
-"""
-        return web.Response(body=js, content_type="application/javascript")
-
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up the FullStackSecurity component."""
-    hass.data.setdefault(DOMAIN, {})
-    return True
-
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up FullStackSecurity from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    
-    # Pre-import to avoid blocking call warning in HA core
-    import custom_components.fullstacksecurity.alarm_control_panel
-    
-    # Register the Lovelace card view directly from memory!
-    hass.http.register_view(FullStackSecurityCardView())
-    
-    # Store options for the alarm panel to use
-    hass.data[DOMAIN][entry.entry_id] = entry.options
-
-    # Register Sidebar Panel safely
-    try:
-        sensors = entry.options.get("doors", []) + entry.options.get("vibration", [])
-        async_register_built_in_panel(
-            hass,
-            component_name="custom",
-            sidebar_title="Security",
-            sidebar_icon="mdi:shield-home",
-            frontend_url_path="fullstacksecurity",
-            config={
-                "_panel_custom": {
-                    "name": "fullstacksecurity-card",
-                    "js_url": "/fullstacksecurity_card/fullstacksecurity-card.js",
-                    "embed_iframe": False,
-                    "trust_external": False,
-                },
-                "entity": f"alarm_control_panel.full_stack_security",
-                "sensors": sensors
-            },
-            require_admin=False,
-        )
-    except Exception as e:
-        _LOGGER.error("Failed to register sidebar panel: %s", e)
-
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    # Listen for options updates
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
-
-    return True
-
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
-        async_remove_panel(hass, "fullstacksecurity")
-    return unload_ok
-
-async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry when options change."""
-    await hass.config_entries.async_reload(entry.entry_id)
