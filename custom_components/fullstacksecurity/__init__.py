@@ -28,9 +28,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v14.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v15.js")
         
-        js_content = """class FullStackSecurityCardV14 extends HTMLElement {
+        js_content = """class FullStackSecurityCardV15 extends HTMLElement {
   set panel(panel) {
     this._panel = panel;
     if (panel && panel.config) {
@@ -50,31 +50,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
           :host {
             display: block;
             font-family: 'Inter', system-ui, sans-serif;
-            --glass-bg: rgba(30, 41, 59, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.1);
-            --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
-            padding: 20px;
-            box-sizing: border-box;
             width: 100%;
-            height: 100%;
+            box-sizing: border-box;
           }
-          .container {
-            background: var(--glass-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--glass-border);
-            border-radius: 24px;
-            padding: 40px;
+          ha-card {
+            background: var(--glass-bg, rgba(30, 41, 59, 0.9));
+            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+            border-radius: var(--ha-card-border-radius, 16px);
+            padding: 20px;
             color: #f8fafc;
-            box-shadow: var(--glass-shadow);
-            max-width: 580px;
-            margin: 20px auto;
+            box-shadow: var(--ha-card-box-shadow, 0 8px 32px 0 rgba(0, 0, 0, 0.3));
             text-align: center;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.4s ease;
             position: relative;
             overflow: hidden;
+            box-sizing: border-box;
+            width: 100%;
           }
-          .container::before {
+          ha-card::before {
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0; height: 4px;
@@ -86,12 +79,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
           }
           h1 {
             margin: 0;
-            font-size: 28px;
+            font-size: 24px;
             font-weight: 700;
             letter-spacing: -0.5px;
+            text-align: left;
+            flex: 1;
           }
           .config-btn {
             background: rgba(255,255,255,0.1);
@@ -103,6 +100,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             font-size: 14px;
             font-weight: 600;
             transition: all 0.2s ease;
+            white-space: nowrap;
           }
           .config-btn:hover {
             background: rgba(255,255,255,0.2);
@@ -118,12 +116,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             text-transform: uppercase;
             color: var(--status-color, #4ade80);
             border: 1px solid var(--status-color, #4ade80);
-            margin-bottom: 30px;
+            margin-bottom: 24px;
             transition: all 0.3s ease;
           }
           .group-title {
             text-align: left;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
             color: #94a3b8;
             text-transform: uppercase;
@@ -136,9 +134,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
           .sensors-list {
             text-align: left;
             background: rgba(0,0,0,0.15);
-            border-radius: 16px;
-            padding: 15px;
-            margin-bottom: 30px;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 24px;
+            width: 100%;
+            box-sizing: border-box;
           }
           .sensor-item {
             display: flex;
@@ -146,21 +146,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             align-items: center;
             padding: 12px 0;
             border-bottom: 1px solid rgba(255,255,255,0.05);
+            flex-wrap: wrap;
+            gap: 10px;
           }
           .sensor-item:last-child {
             border-bottom: none;
           }
           .sensor-name {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 500;
             color: #cbd5e1;
+            flex: 1;
+            min-width: 120px;
           }
           .sensor-state {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
             display: flex;
             align-items: center;
             gap: 8px;
+            white-space: nowrap;
           }
           .sensor-state.safe { color: #4ade80; }
           .sensor-state.alert { color: #f87171; animation: pulse 2s infinite; }
@@ -170,17 +175,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             background: var(--status-color, #4ade80);
             color: #000;
             border: none;
-            padding: 16px 32px;
-            border-radius: 16px;
-            font-size: 18px;
+            padding: 16px;
+            border-radius: 12px;
+            font-size: 16px;
             font-weight: 700;
             cursor: pointer;
             width: 100%;
             transition: all 0.3s ease;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            box-sizing: border-box;
+            display: block;
           }
           .action-btn:hover {
-            transform: translateY(-2px) scale(1.02);
+            transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(0,0,0,0.3);
           }
           .action-btn:active {
@@ -192,22 +199,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             display: none;
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(15, 23, 42, 0.8);
+            background: rgba(15, 23, 42, 0.9);
             backdrop-filter: blur(8px);
             z-index: 100;
             justify-content: center;
             align-items: center;
-            border-radius: 24px;
           }
           .modal-content {
-            background: rgba(30, 41, 59, 0.95);
-            padding: 30px;
-            border-radius: 20px;
+            background: rgba(30, 41, 59, 1);
+            padding: 24px;
+            border-radius: 16px;
             width: 90%;
-            max-width: 450px;
+            max-width: 400px;
             border: 1px solid rgba(255,255,255,0.1);
             box-shadow: 0 20px 40px rgba(0,0,0,0.5);
             text-align: left;
+            box-sizing: border-box;
           }
           .modal-header {
             display: flex;
@@ -217,7 +224,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
           }
           .modal-header h2 {
             margin: 0;
-            font-size: 20px;
+            font-size: 18px;
           }
           .close-modal {
             background: none;
@@ -225,25 +232,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             color: #94a3b8;
             font-size: 24px;
             cursor: pointer;
+            padding: 0;
+            line-height: 1;
           }
           .close-modal:hover { color: #fff; }
           .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 16px;
           }
           .form-group label {
             display: block;
-            margin-bottom: 8px;
-            font-size: 14px;
+            margin-bottom: 6px;
+            font-size: 13px;
             color: #cbd5e1;
           }
           select {
             width: 100%;
-            padding: 12px;
+            padding: 10px;
             background: rgba(0,0,0,0.2);
             border: 1px solid rgba(255,255,255,0.1);
             color: #fff;
             border-radius: 8px;
-            font-size: 15px;
+            font-size: 14px;
+            box-sizing: border-box;
           }
           select option {
             background: #1e293b;
@@ -257,7 +267,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             border-radius: 8px;
             font-weight: 600;
             cursor: pointer;
-            margin-bottom: 20px;
+            margin-top: 10px;
+            box-sizing: border-box;
           }
           .add-btn:hover { background: #2563eb; }
           .remove-btn {
@@ -268,7 +279,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             padding: 4px 8px;
             font-size: 12px;
             cursor: pointer;
-            margin-left: 10px;
           }
           .remove-btn:hover { background: rgba(239, 68, 68, 0.4); }
           
@@ -284,7 +294,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             100% { box-shadow: 0 0 20px rgba(248, 113, 113, 0.2); }
           }
         </style>
-        <div class="container" id="main-container">
+        <ha-card id="main-container">
           <div class="header-row">
             <h1>FullStack Security</h1>
             <button class="config-btn" id="config-btn">Configure</button>
@@ -319,9 +329,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
               <button class="add-btn" id="add-entity-btn">ADD SENSOR</button>
             </div>
           </div>
-        </div>
+        </ha-card>
       `;
-      this.content = this.querySelector('.container');
+      this.content = this.querySelector('ha-card');
       this.statusBadge = this.querySelector('#status-badge');
       this.sensorsList = this.querySelector('#sensors-list');
       this.actionBtn = this.querySelector('#action-btn');
@@ -366,9 +376,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       });
     }
 
-    // Assign hass dynamically if updated
     let entityId = this.config && this.config.entity;
-    
     if (!entityId || !hass.states[entityId]) {
       const allAlarms = Object.keys(hass.states).filter(k => k.startsWith('alarm_control_panel.'));
       const found = allAlarms.find(k => k.includes('fullstack') || k.includes('full_stack'));
@@ -510,11 +518,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
   }
 }
 
-customElements.define("fullstacksecurity-card-v14", FullStackSecurityCardV14);
+customElements.define("fullstacksecurity-card-v15", FullStackSecurityCardV15);
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: "fullstacksecurity-card-v14",
-  name: "FullStack Security Card V14",
+  type: "fullstacksecurity-card-v15",
+  name: "FullStack Security Card V15",
   preview: true,
   description: "A custom card and panel for the FullStack Security plugin."
 });"""
@@ -541,8 +549,8 @@ window.customCards.push({
             frontend_url_path="fullstacksecurity",
             config={
                 "_panel_custom": {
-                    "name": "fullstacksecurity-card-v14",
-                    "js_url": "/local/fullstacksecurity-card-v14.js?v=1.0.13",
+                    "name": "fullstacksecurity-card-v15",
+                    "js_url": "/local/fullstacksecurity-card-v15.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
