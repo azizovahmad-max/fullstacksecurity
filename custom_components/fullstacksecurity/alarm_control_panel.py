@@ -30,6 +30,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
         self.hass = hass
         self._name = "FullStack Security"
         self._attr_unique_id = entry_id
+        self._attr_code_arm_required = False
         self._state = AlarmControlPanelState.DISARMED
         
         self._doors = options.get("doors", [])
