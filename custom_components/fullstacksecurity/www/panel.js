@@ -264,6 +264,7 @@
           animation: blink 2s infinite;
         }
         .banner.red { background: var(--fss-red); }
+        .banner[hidden] { display: none; }
 
         /* rows */
         .row {
