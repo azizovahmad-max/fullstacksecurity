@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v16.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v17.js")
         
         js_content = """class FullStackSecurityCardV16 extends HTMLElement {
   set panel(panel) {
@@ -353,6 +353,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         }
       });
       
+      this.typeSelect.addEventListener('change', () => {
+        this.populateDropdown();
+      });
+      
       this.configBtn.addEventListener('click', () => {
         this.populateDropdown();
         this.configModal.style.display = 'flex';
@@ -469,13 +473,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
   }
   
   populateDropdown() {
+    const type = this.typeSelect.value;
     let options = '<option value="">Select a device...</option>';
-    const entities = Object.keys(this._hass.states).filter(k => k.startsWith('binary_sensor.') || k.startsWith('siren.') || k.startsWith('switch.'));
+    
+    const entities = Object.keys(this._hass.states).filter(k => {
+        const obj = this._hass.states[k];
+        const domain = k.split('.')[0];
+        const deviceClass = obj.attributes.device_class || '';
+        const nameId = (k + (obj.attributes.friendly_name || '')).toLowerCase();
+        
+        if (type === 'sirens') {
+            return domain === 'siren' || domain === 'switch';
+        } else if (type === 'vibration') {
+            return domain === 'binary_sensor' && (deviceClass === 'vibration' || nameId.includes('vibration'));
+        } else if (type === 'doors') {
+            return domain === 'binary_sensor' && (deviceClass === 'door' || deviceClass === 'window' || deviceClass === 'garage_door' || deviceClass === 'opening' || nameId.includes('door') || nameId.includes('window') || nameId.includes('contact'));
+        }
+        return false;
+    });
+    
     entities.sort().forEach(e => {
         const obj = this._hass.states[e];
         const name = obj.attributes.friendly_name || e;
-        options += `<option value="${e}">${name} (${e.split('.')[0]})</option>`;
+        options += `<option value="${e}">${name}</option>`;
     });
+    
+    if (entities.length === 0) {
+        options = '<option value="">No matching entities found...</option>';
+    }
+    
     this.entitySelect.innerHTML = options;
   }
 
@@ -550,7 +576,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v16.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v17.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
