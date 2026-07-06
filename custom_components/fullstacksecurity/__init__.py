@@ -28,9 +28,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v13.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v14.js")
         
-        js_content = """class FullStackSecurityCard extends HTMLElement {
+        js_content = """class FullStackSecurityCardV14 extends HTMLElement {
   set panel(panel) {
     this._panel = panel;
     if (panel && panel.config) {
@@ -187,6 +187,91 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             transform: translateY(1px);
           }
           
+          /* Modal Styles */
+          .modal-overlay {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+            border-radius: 24px;
+          }
+          .modal-content {
+            background: rgba(30, 41, 59, 0.95);
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 450px;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            text-align: left;
+          }
+          .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+          }
+          .modal-header h2 {
+            margin: 0;
+            font-size: 20px;
+          }
+          .close-modal {
+            background: none;
+            border: none;
+            color: #94a3b8;
+            font-size: 24px;
+            cursor: pointer;
+          }
+          .close-modal:hover { color: #fff; }
+          .form-group {
+            margin-bottom: 20px;
+          }
+          .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #cbd5e1;
+          }
+          select {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            border-radius: 8px;
+            font-size: 15px;
+          }
+          select option {
+            background: #1e293b;
+          }
+          .add-btn {
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            padding: 12px;
+            width: 100%;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-bottom: 20px;
+          }
+          .add-btn:hover { background: #2563eb; }
+          .remove-btn {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-left: 10px;
+          }
+          .remove-btn:hover { background: rgba(239, 68, 68, 0.4); }
+          
           @keyframes pulse {
             0% { opacity: 1; }
             50% { opacity: 0.5; }
@@ -207,6 +292,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
           <div class="status-badge" id="status-badge">INITIALIZING</div>
           <div class="sensors-list" id="sensors-list"></div>
           <button class="action-btn" id="action-btn">PLEASE WAIT</button>
+          
+          <div class="modal-overlay" id="config-modal">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h2>Add Sensor</h2>
+                <button class="close-modal" id="close-modal">&times;</button>
+              </div>
+              
+              <div class="form-group">
+                <label>Sensor Type</label>
+                <select id="type-select">
+                  <option value="doors">Door Sensor</option>
+                  <option value="vibration">Vibration Sensor</option>
+                  <option value="sirens">Siren/Alarm</option>
+                </select>
+              </div>
+              
+              <div class="form-group">
+                <label>Select Entity</label>
+                <select id="entity-select">
+                  <option value="">Select a device...</option>
+                </select>
+              </div>
+              
+              <button class="add-btn" id="add-entity-btn">ADD SENSOR</button>
+            </div>
+          </div>
         </div>
       `;
       this.content = this.querySelector('.container');
@@ -214,7 +326,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       this.sensorsList = this.querySelector('#sensors-list');
       this.actionBtn = this.querySelector('#action-btn');
       this.mainContainer = this.querySelector('#main-container');
+      
       this.configBtn = this.querySelector('#config-btn');
+      this.configModal = this.querySelector('#config-modal');
+      this.closeModalBtn = this.querySelector('#close-modal');
+      this.entitySelect = this.querySelector('#entity-select');
+      this.typeSelect = this.querySelector('#type-select');
+      this.addEntityBtn = this.querySelector('#add-entity-btn');
       
       this.actionBtn.addEventListener('click', () => {
         const entity = this._entityId || 'alarm_control_panel.fullstack_security';
@@ -226,27 +344,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       });
       
       this.configBtn.addEventListener('click', () => {
-        const configEntryId = (this._panel && this._panel.config && this._panel.config.config_entry_id) || null;
-        if (configEntryId) {
-            window.dispatchEvent(new CustomEvent('hass-more-info', {
-              detail: { entityId: this._entityId },
-              bubbles: true,
-              composed: true,
-            }));
-            
-            if (window.location.pathname.includes('fullstacksecurity')) {
-               window.location.href = `/config/integrations/integration/fullstacksecurity`;
-            }
-        } else {
-            window.dispatchEvent(new CustomEvent('hass-more-info', {
-              detail: { entityId: this._entityId },
-              bubbles: true,
-              composed: true,
-            }));
-        }
+        this.populateDropdown();
+        this.configModal.style.display = 'flex';
+      });
+      
+      this.closeModalBtn.addEventListener('click', () => {
+        this.configModal.style.display = 'none';
+      });
+      
+      this.addEntityBtn.addEventListener('click', () => {
+        const entityId = this.entitySelect.value;
+        const type = this.typeSelect.value;
+        if (!entityId) return;
+        
+        this._hass.callService('fullstacksecurity', 'update_config', {
+            entity_id: entityId,
+            type: type,
+            action: 'add'
+        });
+        this.configModal.style.display = 'none';
       });
     }
 
+    // Assign hass dynamically if updated
     let entityId = this.config && this.config.entity;
     
     if (!entityId || !hass.states[entityId]) {
@@ -272,7 +392,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     this._state = stateObj.state;
     this.updateStatus(this._state);
     
-    // Read the attributes exposed by the python backend
     const attrs = stateObj.attributes || {};
     const doors = attrs.doors || [];
     const vibrations = attrs.vibration || [];
@@ -285,35 +404,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         let html = `<div class="group-title">${title}</div>`;
         items.forEach(sensorId => {
             const sensorObj = hass.states[sensorId];
-            if (sensorObj) {
-                const name = sensorObj.attributes.friendly_name || sensorId.split('.')[1].replace(/_/g, ' ');
-                const state = sensorObj.state;
-                let stateClass = '';
-                let stateText = '';
-                
-                if (type === 'door') {
-                    const isSafe = (state === 'off' || state === 'closed');
-                    stateClass = isSafe ? 'safe' : 'alert';
-                    stateText = isSafe ? 'CLOSED' : 'OPEN';
-                } else if (type === 'vibration') {
-                    const isSafe = (state === 'off' || state === 'clear');
-                    stateClass = isSafe ? 'safe' : 'alert';
-                    stateText = isSafe ? 'CLEAR' : 'DETECTED';
-                } else if (type === 'siren') {
-                    const isOn = (state === 'on');
-                    stateClass = isOn ? 'alert' : 'safe';
-                    stateText = isOn ? 'SOUNDING' : 'OFF';
-                }
-                
-                html += `
-                  <div class="sensor-item">
-                    <span class="sensor-name">${name}</span>
-                    <span class="sensor-state ${stateClass}">
-                      ${stateText}
-                    </span>
-                  </div>
-                `;
+            const name = sensorObj ? (sensorObj.attributes.friendly_name || sensorId.split('.')[1].replace(/_/g, ' ')) : sensorId;
+            const state = sensorObj ? sensorObj.state : 'unavailable';
+            let stateClass = '';
+            let stateText = '';
+            
+            if (type === 'door') {
+                const isSafe = (state === 'off' || state === 'closed');
+                stateClass = isSafe ? 'safe' : 'alert';
+                stateText = isSafe ? 'CLOSED' : 'OPEN';
+            } else if (type === 'vibration') {
+                const isSafe = (state === 'off' || state === 'clear');
+                stateClass = isSafe ? 'safe' : 'alert';
+                stateText = isSafe ? 'CLEAR' : 'DETECTED';
+            } else if (type === 'siren') {
+                const isOn = (state === 'on');
+                stateClass = isOn ? 'alert' : 'safe';
+                stateText = isOn ? 'SOUNDING' : 'OFF';
             }
+            
+            if (state === 'unavailable') {
+                stateClass = 'neutral';
+                stateText = 'UNAVAILABLE';
+            }
+            
+            html += `
+              <div class="sensor-item">
+                <span class="sensor-name">${name}</span>
+                <span class="sensor-state ${stateClass}">
+                  ${stateText}
+                  <button class="remove-btn" onclick="this.getRootNode().host.removeSensor('${sensorId}', '${type === 'door' ? 'doors' : (type === 'vibration' ? 'vibration' : 'sirens')}')">X</button>
+                </span>
+              </div>
+            `;
         });
         return html;
     };
@@ -328,12 +451,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       this.sensorsList.innerHTML = sensorsHtml;
     }
   }
+  
+  removeSensor(entityId, type) {
+    this._hass.callService('fullstacksecurity', 'update_config', {
+        entity_id: entityId,
+        type: type,
+        action: 'remove'
+    });
+  }
+  
+  populateDropdown() {
+    let options = '<option value="">Select a device...</option>';
+    const entities = Object.keys(this._hass.states).filter(k => k.startsWith('binary_sensor.') || k.startsWith('siren.') || k.startsWith('switch.'));
+    entities.sort().forEach(e => {
+        const obj = this._hass.states[e];
+        const name = obj.attributes.friendly_name || e;
+        options += `<option value="${e}">${name} (${e.split('.')[0]})</option>`;
+    });
+    this.entitySelect.innerHTML = options;
+  }
 
   updateStatus(state) {
     let statusText = state.toUpperCase().replace('_', ' ');
     let color = '#4ade80'; 
     let btnText = "DISARM";
-    this.mainContainer.style.animation = 'none';
+    if (this.mainContainer) this.mainContainer.style.animation = 'none';
     
     if (state === 'disarmed') {
       color = '#4ade80';
@@ -346,19 +488,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     } else if (state === 'triggered') {
       color = '#ef4444'; 
       statusText = "ALARM TRIGGERED!";
-      this.mainContainer.style.animation = 'triggeredGlow 2s infinite';
+      if (this.mainContainer) this.mainContainer.style.animation = 'triggeredGlow 2s infinite';
     }
 
-    this.mainContainer.style.setProperty('--status-color', color);
-    this.statusBadge.innerText = statusText;
-    this.actionBtn.innerText = btnText;
-    
-    if (btnText.startsWith("ARM")) {
-      this.actionBtn.style.background = '#f87171'; 
-      this.actionBtn.style.color = '#fff';
-    } else {
-      this.actionBtn.style.background = '#4ade80'; 
-      this.actionBtn.style.color = '#000';
+    if (this.mainContainer) this.mainContainer.style.setProperty('--status-color', color);
+    if (this.statusBadge) this.statusBadge.innerText = statusText;
+    if (this.actionBtn) {
+        this.actionBtn.innerText = btnText;
+        if (btnText.startsWith("ARM")) {
+          this.actionBtn.style.background = '#f87171'; 
+          this.actionBtn.style.color = '#fff';
+        } else {
+          this.actionBtn.style.background = '#4ade80'; 
+          this.actionBtn.style.color = '#000';
+        }
     }
   }
 
@@ -367,11 +510,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
   }
 }
 
-customElements.define("fullstacksecurity-card", FullStackSecurityCard);
+customElements.define("fullstacksecurity-card-v14", FullStackSecurityCardV14);
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: "fullstacksecurity-card",
-  name: "FullStack Security Card",
+  type: "fullstacksecurity-card-v14",
+  name: "FullStack Security Card V14",
   preview: true,
   description: "A custom card and panel for the FullStack Security plugin."
 });"""
@@ -398,8 +541,8 @@ window.customCards.push({
             frontend_url_path="fullstacksecurity",
             config={
                 "_panel_custom": {
-                    "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v13.js?v=1.0.13",
+                    "name": "fullstacksecurity-card-v14",
+                    "js_url": "/local/fullstacksecurity-card-v14.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
@@ -417,6 +560,33 @@ window.customCards.push({
 
     # Listen for options updates
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
+    async def handle_update_config(call):
+        entity_id = call.data.get("entity_id")
+        sensor_type = call.data.get("type")
+        action = call.data.get("action")
+        
+        if not entity_id or not sensor_type or action not in ("add", "remove"):
+            return
+            
+        current_options = dict(entry.options)
+        for t in ["doors", "vibration", "sirens", "lights", "buttons"]:
+            if t not in current_options:
+                current_options[t] = []
+                
+        if sensor_type not in current_options:
+            return
+            
+        if action == "add":
+            if entity_id not in current_options[sensor_type]:
+                current_options[sensor_type].append(entity_id)
+        elif action == "remove":
+            if entity_id in current_options[sensor_type]:
+                current_options[sensor_type].remove(entity_id)
+                
+        hass.config_entries.async_update_entry(entry, options=current_options)
+        
+    hass.services.async_register(DOMAIN, "update_config", handle_update_config)
 
     return True
 
