@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v29.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v30.js")
         
         js_content = """class FullStackSecurityCardV28 extends HTMLElement {
   set panel(panel) {
@@ -823,7 +823,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v29.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v30.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
@@ -883,6 +883,8 @@ window.customCards.push({
         for t in ["doors", "vibration", "sirens", "lights", "buttons"]:
             if t not in current_options:
                 current_options[t] = []
+            else:
+                current_options[t] = list(current_options[t])
                 
         if sensor_type not in current_options:
             return
