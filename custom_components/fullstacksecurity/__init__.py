@@ -399,7 +399,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card.js?v=1.0.7",
+                    "js_url": "/local/fullstacksecurity-card.js?v=1.0.12",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
