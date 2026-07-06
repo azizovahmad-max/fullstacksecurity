@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v25.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v26.js")
         
         js_content = """class FullStackSecurityCardV16 extends HTMLElement {
   set panel(panel) {
@@ -194,48 +194,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             transform: translateY(1px);
           }
           
-          /* Modal Styles */
-          .modal-overlay {
-            display: none;
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(15, 23, 42, 0.9);
-            backdrop-filter: blur(8px);
-            z-index: 100;
-            justify-content: center;
-            align-items: center;
-          }
-          .modal-content {
-            background: rgba(30, 41, 59, 1);
-            padding: 24px;
-            border-radius: 16px;
-            width: 90%;
-            max-width: 400px;
-            border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-            text-align: left;
-            box-sizing: border-box;
-          }
-          .modal-header {
+          .main-tabs {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
+            background: rgba(0,0,0,0.2);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
           }
-          .modal-header h2 {
-            margin: 0;
-            font-size: 18px;
-          }
-          .close-modal {
-            background: none;
+          .main-tab {
+            flex: 1;
+            padding: 15px;
+            background: transparent;
             border: none;
             color: #94a3b8;
-            font-size: 24px;
+            font-size: 14px;
+            font-weight: 600;
             cursor: pointer;
-            padding: 0;
-            line-height: 1;
+            transition: all 0.3s ease;
           }
-          .close-modal:hover { color: #fff; }
+          .main-tab.active {
+            color: #fff;
+            border-bottom: 2px solid var(--status-color, #4ade80);
+            background: rgba(255,255,255,0.05);
+          }
+          .main-tab:hover {
+            color: #fff;
+          }
+          .tab-section {
+            display: none;
+            padding: 20px;
+          }
+          .tab-section.active {
+            display: block;
+          }
           .form-group {
             margin-bottom: 16px;
           }
@@ -295,104 +284,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
           }
         </style>
         <ha-card id="main-container">
-          <div class="header-row">
+          <div class="header-row" style="margin-bottom: 0;">
             <h1>FullStack Security</h1>
-            <div>
-              <button class="config-btn" id="settings-btn" style="margin-right: 8px;">⚙️ Settings</button>
-              <button class="config-btn" id="config-btn">Configure</button>
-            </div>
-          </div>
-          <div class="status-badge" id="status-badge">INITIALIZING</div>
-          <div class="sensors-list" id="sensors-list"></div>
-          <button class="action-btn" id="action-btn">PLEASE WAIT</button>
-          
-          <!-- Settings Modal -->
-          <div id="settings-modal" class="modal-overlay" style="display: none;">
-            <div class="modal-content" style="max-width: 500px;">
-              <span class="close-btn" id="settings-close">&times;</span>
-              <h3 style="margin-top: 0; color: white;">Settings</h3>
-              
-              <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
-                <button id="tab-general" style="background: none; border: none; color: white; cursor: pointer; padding: 5px 10px; border-bottom: 2px solid #ef4444;">General</button>
-                <button id="tab-actions" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 5px 10px; border-bottom: 2px solid transparent;">Trigger Actions</button>
-              </div>
-              
-              <div id="content-general">
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Background Color:</label>
-                <select id="bg-color-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                  <option value="default">System Default</option>
-                  <option value="black">Solid Black</option>
-                  <option value="white">Solid White</option>
-                  <option value="transparent">Transparent</option>
-                </select>
-                
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Arming Delay (seconds):</label>
-                <input type="number" id="arming-delay-input" min="0" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Single Tap Action:</label>
-                <select id="btn-single-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                  <option value="arm">Arm System</option>
-                  <option value="disarm">Disarm System</option>
-                  <option value="none">Do Nothing</option>
-                </select>
-                
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Double Tap Action:</label>
-                <select id="btn-double-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                  <option value="arm">Arm System</option>
-                  <option value="disarm">Disarm System</option>
-                  <option value="none">Do Nothing</option>
-                </select>
-                
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Triple Tap Action:</label>
-                <select id="btn-triple-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                  <option value="arm">Arm System</option>
-                  <option value="disarm">Disarm System</option>
-                  <option value="none">Do Nothing</option>
-                </select>
-              </div>
-              
-              <div id="content-actions" style="display: none;">
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Siren Tone:</label>
-                <select id="siren-tone-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                  <option value="">Default (No Tone)</option>
-                </select>
-                
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Siren Duration (seconds):</label>
-                <input type="number" id="siren-duration-input" min="0" placeholder="0 = infinite" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Action Lights (comma-separated entities):</label>
-                <input type="text" id="flash-lights-input" placeholder="light.living_room, light.kitchen" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Light Action Mode:</label>
-                <select id="light-mode-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                  <option value="flash_long">Flash Long</option>
-                  <option value="flash_short">Flash Short</option>
-                  <option value="solid_red">Solid Red</option>
-                  <option value="solid_white">Solid White</option>
-                </select>
-
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Light Action Duration (seconds):</label>
-                <input type="number" id="light-duration-input" min="0" placeholder="0 = infinite" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Phone Notifications:</label>
-                <div id="notify-phones-container" style="max-height: 150px; overflow-y: auto; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                </div>
-              </div>
-              
-              <button id="save-settings-btn" class="save-btn" style="width:100%; margin-top: 10px; border-radius: 6px;">Save Settings</button>
-            </div>
           </div>
           
-          <div class="modal-overlay" id="config-modal">
-            <div class="modal-content">
-              <div class="modal-header">
-                <h2>Add Sensor</h2>
-                <button class="close-modal" id="close-modal">&times;</button>
-              </div>
-              
+          <div class="main-tabs">
+            <button class="main-tab active" id="nav-overview">Overview</button>
+            <button class="main-tab" id="nav-sensors">Sensors</button>
+            <button class="main-tab" id="nav-settings">Settings</button>
+          </div>
+          
+          <!-- OVERVIEW TAB -->
+          <div id="tab-overview-content" class="tab-section active">
+            <div class="status-badge" id="status-badge">INITIALIZING</div>
+            <button class="action-btn" id="action-btn">PLEASE WAIT</button>
+          </div>
+          
+          <!-- SENSORS TAB -->
+          <div id="tab-sensors-content" class="tab-section">
+            <div class="sensors-list" id="sensors-list"></div>
+            
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+              <h3 style="margin-top: 0;">Add Sensor</h3>
               <div class="form-group">
                 <label>Sensor Type</label>
-                <select id="type-select">
+                <select id="type-select" style="width:100%; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white;">
                   <option value="doors">Door Sensor</option>
                   <option value="vibration">Vibration Sensor</option>
                   <option value="sirens">Siren/Alarm</option>
@@ -403,13 +319,85 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
               
               <div class="form-group">
                 <label>Select Entity</label>
-                <select id="entity-select">
+                <select id="entity-select" style="width:100%; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white;">
                   <option value="">Select a device...</option>
                 </select>
               </div>
               
               <button class="add-btn" id="add-entity-btn">ADD SENSOR</button>
             </div>
+          </div>
+          
+          <!-- SETTINGS TAB -->
+          <div id="tab-settings-content" class="tab-section">
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+              <button id="tab-general" style="background: none; border: none; color: white; cursor: pointer; padding: 5px 10px; border-bottom: 2px solid #ef4444;">General</button>
+              <button id="tab-actions" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 5px 10px; border-bottom: 2px solid transparent;">Trigger Actions</button>
+            </div>
+            
+            <div id="content-general">
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Background Color:</label>
+              <select id="bg-color-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                <option value="default">System Default</option>
+                <option value="black">Solid Black</option>
+                <option value="white">Solid White</option>
+                <option value="transparent">Transparent</option>
+              </select>
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Arming Delay (seconds):</label>
+              <input type="number" id="arming-delay-input" min="0" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Single Tap Action:</label>
+              <select id="btn-single-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                <option value="arm">Arm System</option>
+                <option value="disarm">Disarm System</option>
+                <option value="none">Do Nothing</option>
+              </select>
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Double Tap Action:</label>
+              <select id="btn-double-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                <option value="arm">Arm System</option>
+                <option value="disarm">Disarm System</option>
+                <option value="none">Do Nothing</option>
+              </select>
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Triple Tap Action:</label>
+              <select id="btn-triple-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                <option value="arm">Arm System</option>
+                <option value="disarm">Disarm System</option>
+                <option value="none">Do Nothing</option>
+              </select>
+            </div>
+            
+            <div id="content-actions" style="display: none;">
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Siren Tone:</label>
+              <select id="siren-tone-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                <option value="">Default (No Tone)</option>
+              </select>
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Siren Duration (seconds):</label>
+              <input type="number" id="siren-duration-input" min="0" placeholder="0 = infinite" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Action Lights (comma-separated entities):</label>
+              <input type="text" id="flash-lights-input" placeholder="light.living_room, light.kitchen" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Light Action Mode:</label>
+              <select id="light-mode-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                <option value="flash_long">Flash Long</option>
+                <option value="flash_short">Flash Short</option>
+                <option value="solid_red">Solid Red</option>
+                <option value="solid_white">Solid White</option>
+              </select>
+
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Light Action Duration (seconds):</label>
+              <input type="number" id="light-duration-input" min="0" placeholder="0 = infinite" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Phone Notifications:</label>
+              <div id="notify-phones-container" style="max-height: 150px; overflow-y: auto; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+              </div>
+            </div>
+            
+            <button id="save-settings-btn" class="save-btn" style="width:100%; margin-top: 10px; border-radius: 6px;">Save Settings</button>
           </div>
         </ha-card>
       `;
@@ -419,17 +407,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       this.actionBtn = this.querySelector('#action-btn');
       this.mainContainer = this.querySelector('#main-container');
       
-      this.configBtn = this.querySelector('#config-btn');
-      this.configModal = this.querySelector('#config-modal');
-      this.closeModalBtn = this.querySelector('#close-modal');
+      this.navOverview = this.querySelector('#nav-overview');
+      this.navSensors = this.querySelector('#nav-sensors');
+      this.navSettings = this.querySelector('#nav-settings');
+      
+      this.tabOverview = this.querySelector('#tab-overview-content');
+      this.tabSensors = this.querySelector('#tab-sensors-content');
+      this.tabSettings = this.querySelector('#tab-settings-content');
+      
       this.entitySelect = this.querySelector('#entity-select');
       this.typeSelect = this.querySelector('#type-select');
       this.addEntityBtn = this.querySelector('#add-entity-btn');
-      
-      this.settingsBtn = this.querySelector('#settings-btn');
-      this.settingsModal = this.querySelector('#settings-modal');
-      this.settingsClose = this.querySelector('#settings-close');
       this.saveSettingsBtn = this.querySelector('#save-settings-btn');
+      
+      const switchTab = (activeNav, activeTab) => {
+        [this.navOverview, this.navSensors, this.navSettings].forEach(n => n.classList.remove('active'));
+        [this.tabOverview, this.tabSensors, this.tabSettings].forEach(t => t.classList.remove('active'));
+        activeNav.classList.add('active');
+        activeTab.classList.add('active');
+      };
+      
+      this.navOverview.addEventListener('click', () => switchTab(this.navOverview, this.tabOverview));
+      
+      this.navSensors.addEventListener('click', () => {
+        this.populateDropdown();
+        switchTab(this.navSensors, this.tabSensors);
+      });
       
       this.actionBtn.addEventListener('click', () => {
         const entity = this._entityId || 'alarm_control_panel.fullstack_security';
@@ -444,15 +447,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         this.populateDropdown();
       });
       
-      this.configBtn.addEventListener('click', () => {
-        this.populateDropdown();
-        this.configModal.style.display = 'flex';
-      });
-      
-      this.closeModalBtn.addEventListener('click', () => {
-        this.configModal.style.display = 'none';
-      });
-      
       this.addEntityBtn.addEventListener('click', () => {
         const type = this.typeSelect.value;
         const entityId = this.entitySelect.value;
@@ -460,7 +454,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         this.addSensor(entityId, type);
       });
       
-      this.settingsBtn.addEventListener('click', () => {
+      this.navSettings.addEventListener('click', () => {
+        switchTab(this.navSettings, this.tabSettings);
+
         const attrs = this._hass.states[this._entityId]?.attributes || {};
         this.querySelector('#bg-color-select').value = attrs.bg_color || 'default';
         this.querySelector('#arming-delay-input').value = attrs.arming_delay || 30;
@@ -509,8 +505,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             });
         }
         notifyContainer.innerHTML = phonesHtml;
-        
-        this.settingsModal.style.display = 'flex';
       });
       
       const tabGeneral = this.querySelector('#tab-general');
@@ -535,11 +529,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
           contentActions.style.display = 'block';
           contentGeneral.style.display = 'none';
       });
-      
-      this.settingsClose.addEventListener('click', () => {
-        this.settingsModal.style.display = 'none';
-      });
-      
       this.saveSettingsBtn.addEventListener('click', () => {
         const bg_color = this.querySelector('#bg-color-select').value;
         const delay = this.querySelector('#arming-delay-input').value;
@@ -574,11 +563,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             notify_phones: notifyStr
         }).then(() => {
             setTimeout(() => {
-                this.settingsModal.style.display = 'none';
                 this.saveSettingsBtn.innerText = 'Save Settings';
             }, 500);
         });
       });
+    }
+
+    addSensor(entityId, type) {
+      if (!this._hass) return;
+      this._hass.callService("fullstacksecurity", "update_config", {
+          action: 'add',
+          type: type,
+          entity_id: entityId
+      });
+    }
+
+    removeSensor(entityId, type) {
+      if (!this._hass) return;
+      if (confirm(`Are you sure you want to remove ${entityId}?`)) {
+        this._hass.callService("fullstacksecurity", "update_config", {
+            action: 'remove',
+            type: type,
+            entity_id: entityId
+        });
+      }
     }
 
     let entityId = this.config && this.config.entity;
@@ -689,14 +697,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     } else {
       this.sensorsList.innerHTML = sensorsHtml;
     }
-  }
-  
-  removeSensor(entityId, type) {
-    this._hass.callService('fullstacksecurity', 'update_config', {
-        entity_id: entityId,
-        type: type,
-        action: 'remove'
-    });
   }
   
   populateDropdown() {
@@ -816,7 +816,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v25.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v26.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
