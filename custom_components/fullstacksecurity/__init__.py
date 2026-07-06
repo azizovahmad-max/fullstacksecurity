@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v22.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v23.js")
         
         js_content = """class FullStackSecurityCardV16 extends HTMLElement {
   set panel(panel) {
@@ -660,7 +660,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         const nameId = (k + (obj.attributes.friendly_name || '')).toLowerCase();
         
         if (type === 'lights') {
-            return domain === 'light' || domain === 'switch';
+            return domain === 'light';
         } else if (type === 'buttons') {
             return domain === 'sensor' || domain === 'binary_sensor' || domain === 'event';
         } else if (type === 'sirens') {
@@ -757,7 +757,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v22.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v23.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
