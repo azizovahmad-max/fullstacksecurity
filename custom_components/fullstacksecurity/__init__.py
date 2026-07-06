@@ -28,9 +28,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v15.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v16.js")
         
-        js_content = """class FullStackSecurityCardV15 extends HTMLElement {
+        js_content = """class FullStackSecurityCardV16 extends HTMLElement {
   set panel(panel) {
     this._panel = panel;
     if (panel && panel.config) {
@@ -518,7 +518,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
   }
 }
 
-customElements.define("fullstacksecurity-card-v15", FullStackSecurityCardV15);
+try { customElements.define("fullstacksecurity-card", FullStackSecurityCardV16); } catch(e) {}
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "fullstacksecurity-card-v15",
@@ -549,8 +549,8 @@ window.customCards.push({
             frontend_url_path="fullstacksecurity",
             config={
                 "_panel_custom": {
-                    "name": "fullstacksecurity-card-v15",
-                    "js_url": "/local/fullstacksecurity-card-v15.js?v=1.0.13",
+                    "name": "fullstacksecurity-card",
+                    "js_url": "/local/fullstacksecurity-card-v16.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
