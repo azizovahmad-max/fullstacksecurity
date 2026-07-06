@@ -3,12 +3,9 @@ from datetime import timedelta
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelEntityFeature,
+    AlarmControlPanelState,
 )
 from homeassistant.const import (
-    STATE_ALARM_DISARMED,
-    STATE_ALARM_ARMING,
-    STATE_ALARM_ARMED_AWAY,
-    STATE_ALARM_TRIGGERED,
     STATE_ON,
     STATE_OFF,
     ATTR_ENTITY_ID,
@@ -33,7 +30,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
         self.hass = hass
         self._name = "FullStack Security"
         self._attr_unique_id = entry_id
-        self._state = STATE_ALARM_DISARMED
+        self._state = AlarmControlPanelState.DISARMED
         
         self._doors = options.get("doors", [])
         self._vibrations = options.get("vibration", [])
@@ -60,7 +57,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
 
             # Handle security sensors (doors, vibration)
             if entity_id in self._doors or entity_id in self._vibrations:
-                if self._state == STATE_ALARM_ARMED_AWAY and new_state.state == STATE_ON:
+                if self._state == AlarmControlPanelState.ARMED_AWAY and new_state.state == STATE_ON:
                     self.hass.async_create_task(self._async_trigger_alarm(entity_id))
             
             # Handle buttons
@@ -96,7 +93,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
 
     async def async_alarm_disarm(self, code=None):
         """Send disarm command."""
-        self._state = STATE_ALARM_DISARMED
+        self._state = AlarmControlPanelState.DISARMED
         if self._arming_timer:
             self._arming_timer()
             self._arming_timer = None
@@ -130,13 +127,13 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
                 )
             return
 
-        self._state = STATE_ALARM_ARMING
+        self._state = AlarmControlPanelState.ARMING
         self.async_write_ha_state()
         _LOGGER.info("FullStackSecurity is arming. 30 seconds delay.")
 
         @callback
         def _arm_system(now):
-            self._state = STATE_ALARM_ARMED_AWAY
+            self._state = AlarmControlPanelState.ARMED_AWAY
             self._arming_timer = None
             self.async_write_ha_state()
             _LOGGER.info("FullStackSecurity is now armed away.")
@@ -145,7 +142,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
 
     async def _async_trigger_alarm(self, trigger_entity):
         """Trigger the alarm."""
-        self._state = STATE_ALARM_TRIGGERED
+        self._state = AlarmControlPanelState.TRIGGERED
         self.async_write_ha_state()
         _LOGGER.warning(f"FullStackSecurity TRIGGERED by {trigger_entity}!")
 
