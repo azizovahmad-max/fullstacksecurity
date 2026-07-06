@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v26.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v27.js")
         
         js_content = """class FullStackSecurityCardV16 extends HTMLElement {
   set panel(panel) {
@@ -569,26 +569,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       });
     }
 
-    addSensor(entityId, type) {
-      if (!this._hass) return;
-      this._hass.callService("fullstacksecurity", "update_config", {
-          action: 'add',
-          type: type,
-          entity_id: entityId
-      });
-    }
-
-    removeSensor(entityId, type) {
-      if (!this._hass) return;
-      if (confirm(`Are you sure you want to remove ${entityId}?`)) {
-        this._hass.callService("fullstacksecurity", "update_config", {
-            action: 'remove',
-            type: type,
-            entity_id: entityId
-        });
-      }
-    }
-
     let entityId = this.config && this.config.entity;
     if (!entityId || !hass.states[entityId]) {
       const allAlarms = Object.keys(hass.states).filter(k => k.startsWith('alarm_control_panel.'));
@@ -696,6 +676,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       this.sensorsList.innerHTML = `<div class="sensor-item"><span class="sensor-name" style="color:#64748b; font-style:italic;">No sensors connected. Click Configure to add them.</span></div>`;
     } else {
       this.sensorsList.innerHTML = sensorsHtml;
+    }
+  }
+  
+  addSensor(entityId, type) {
+    if (!this._hass) return;
+    this._hass.callService("fullstacksecurity", "update_config", {
+        action: 'add',
+        type: type,
+        entity_id: entityId
+    });
+  }
+
+  removeSensor(entityId, type) {
+    if (!this._hass) return;
+    if (confirm(`Are you sure you want to remove ${entityId}?`)) {
+      this._hass.callService("fullstacksecurity", "update_config", {
+          action: 'remove',
+          type: type,
+          entity_id: entityId
+      });
     }
   }
   
@@ -816,7 +816,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v26.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v27.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
