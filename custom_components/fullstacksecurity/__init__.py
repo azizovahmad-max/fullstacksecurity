@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v19.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v20.js")
         
         js_content = """class FullStackSecurityCardV16 extends HTMLElement {
   set panel(panel) {
@@ -297,11 +297,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         <ha-card id="main-container">
           <div class="header-row">
             <h1>FullStack Security</h1>
-            <button class="config-btn" id="config-btn">Configure</button>
+            <div>
+              <button class="config-btn" id="settings-btn" style="margin-right: 8px;">⚙️ Settings</button>
+              <button class="config-btn" id="config-btn">Configure</button>
+            </div>
           </div>
           <div class="status-badge" id="status-badge">INITIALIZING</div>
           <div class="sensors-list" id="sensors-list"></div>
           <button class="action-btn" id="action-btn">PLEASE WAIT</button>
+          
+          <!-- Settings Modal -->
+          <div id="settings-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-content">
+              <span class="close-btn" id="settings-close">&times;</span>
+              <h3 style="margin-top: 0; color: white;">Global Settings</h3>
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Arming Delay (seconds):</label>
+              <input type="number" id="arming-delay-input" min="0" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Single Tap Action:</label>
+              <select id="btn-single-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                <option value="arm">Arm System</option>
+                <option value="disarm">Disarm System</option>
+                <option value="none">Do Nothing</option>
+              </select>
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Double Tap Action:</label>
+              <select id="btn-double-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                <option value="arm">Arm System</option>
+                <option value="disarm">Disarm System</option>
+                <option value="none">Do Nothing</option>
+              </select>
+              
+              <label style="display:block; margin-bottom: 5px; color: #ccc;">Triple Tap Action:</label>
+              <select id="btn-triple-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                <option value="arm">Arm System</option>
+                <option value="disarm">Disarm System</option>
+                <option value="none">Do Nothing</option>
+              </select>
+              
+              <button id="save-settings-btn" class="save-btn" style="width:100%; margin-top: 10px; border-radius: 6px;">Save Settings</button>
+            </div>
+          </div>
           
           <div class="modal-overlay" id="config-modal">
             <div class="modal-content">
@@ -346,6 +383,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       this.typeSelect = this.querySelector('#type-select');
       this.addEntityBtn = this.querySelector('#add-entity-btn');
       
+      this.settingsBtn = this.querySelector('#settings-btn');
+      this.settingsModal = this.querySelector('#settings-modal');
+      this.settingsClose = this.querySelector('#settings-close');
+      this.saveSettingsBtn = this.querySelector('#save-settings-btn');
+      
       this.actionBtn.addEventListener('click', () => {
         const entity = this._entityId || 'alarm_control_panel.fullstack_security';
         if (this._state === 'disarmed') {
@@ -369,16 +411,44 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       });
       
       this.addEntityBtn.addEventListener('click', () => {
-        const entityId = this.entitySelect.value;
         const type = this.typeSelect.value;
+        const entityId = this.entitySelect.value;
         if (!entityId) return;
+        this.addSensor(entityId, type);
+      });
+      
+      this.settingsBtn.addEventListener('click', () => {
+        const attrs = this._hass.states[this._entityId]?.attributes || {};
+        this.querySelector('#arming-delay-input').value = attrs.arming_delay || 30;
+        this.querySelector('#btn-single-select').value = attrs.button_single || 'arm';
+        this.querySelector('#btn-double-select').value = attrs.button_double || 'disarm';
+        this.querySelector('#btn-triple-select').value = attrs.button_triple || 'none';
+        this.settingsModal.style.display = 'flex';
+      });
+      
+      this.settingsClose.addEventListener('click', () => {
+        this.settingsModal.style.display = 'none';
+      });
+      
+      this.saveSettingsBtn.addEventListener('click', () => {
+        const delay = this.querySelector('#arming-delay-input').value;
+        const single = this.querySelector('#btn-single-select').value;
+        const double = this.querySelector('#btn-double-select').value;
+        const triple = this.querySelector('#btn-triple-select').value;
         
-        this._hass.callService('fullstacksecurity', 'update_config', {
-            entity_id: entityId,
-            type: type,
-            action: 'add'
+        this.saveSettingsBtn.innerText = 'Saving...';
+        this._hass.callService("fullstacksecurity", "update_config", {
+            action: 'settings',
+            arming_delay: parseInt(delay),
+            button_single: single,
+            button_double: double,
+            button_triple: triple
+        }).then(() => {
+            setTimeout(() => {
+                this.settingsModal.style.display = 'none';
+                this.saveSettingsBtn.innerText = 'Save Settings';
+            }, 500);
         });
-        this.configModal.style.display = 'none';
       });
     }
 
@@ -607,7 +677,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v19.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v20.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
@@ -627,9 +697,24 @@ window.customCards.push({
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     async def handle_update_config(call):
+        action = call.data.get("action")
+        
+        if action == "settings":
+            new_options = dict(entry.options)
+            if "arming_delay" in call.data:
+                new_options["arming_delay"] = call.data.get("arming_delay")
+            if "button_single" in call.data:
+                new_options["button_single"] = call.data.get("button_single")
+            if "button_double" in call.data:
+                new_options["button_double"] = call.data.get("button_double")
+            if "button_triple" in call.data:
+                new_options["button_triple"] = call.data.get("button_triple")
+            hass.config_entries.async_update_entry(entry, options=new_options)
+            await hass.config_entries.async_reload(entry.entry_id)
+            return
+            
         entity_id = call.data.get("entity_id")
         sensor_type = call.data.get("type")
-        action = call.data.get("action")
         
         if not entity_id or not sensor_type or action not in ("add", "remove"):
             return
