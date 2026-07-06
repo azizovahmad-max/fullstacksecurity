@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v28.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v29.js")
         
         js_content = """class FullStackSecurityCardV28 extends HTMLElement {
   set panel(panel) {
@@ -404,6 +404,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       this.content = this.querySelector('ha-card');
       this.statusBadge = this.querySelector('#status-badge');
       this.sensorsList = this.querySelector('#sensors-list');
+      this.sensorsList.addEventListener('click', (e) => {
+          if (e.target.classList.contains('remove-btn')) {
+              const sensorId = e.target.dataset.sensorId;
+              const type = e.target.dataset.type;
+              this.removeSensor(sensorId, type);
+          }
+      });
       this.actionBtn = this.querySelector('#action-btn');
       this.mainContainer = this.querySelector('#main-container');
       
@@ -658,7 +665,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 <span class="sensor-name">${name}</span>
                 <span class="sensor-state ${stateClass}" ${customStyle}>
                   ${stateText}
-                  <button class="remove-btn" onclick="this.closest('fullstacksecurity-card').removeSensor('${sensorId}', '${type === 'door' ? 'doors' : (type === 'vibration' ? 'vibration' : (type === 'light' ? 'lights' : (type === 'button' ? 'buttons' : 'sirens')))}')">X</button>
+                  <button class="remove-btn" data-sensor-id="${sensorId}" data-type="${type === 'door' ? 'doors' : (type === 'vibration' ? 'vibration' : (type === 'light' ? 'lights' : (type === 'button' ? 'buttons' : 'sirens')))}">X</button>
                 </span>
               </div>
             `;
@@ -816,7 +823,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v28.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v29.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
