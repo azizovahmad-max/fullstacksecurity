@@ -23,15 +23,16 @@ DOMAIN = "fullstacksecurity"
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the FullStackSecurity alarm control panel from a config entry."""
     options = config_entry.options
-    async_add_entities([FullStackSecurityAlarm(hass, options)], True)
+    async_add_entities([FullStackSecurityAlarm(hass, options, config_entry.entry_id)])
 
 class FullStackSecurityAlarm(AlarmControlPanelEntity):
     """Representation of a FullStackSecurity alarm."""
 
-    def __init__(self, hass, options):
+    def __init__(self, hass, options, entry_id):
         """Initialize the alarm."""
         self.hass = hass
         self._name = "FullStack Security"
+        self._attr_unique_id = entry_id
         self._state = STATE_ALARM_DISARMED
         
         self._doors = options.get("doors", [])

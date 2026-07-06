@@ -16,6 +16,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up FullStackSecurity from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     
+    # Pre-import to avoid blocking call warning in HA core
+    import custom_components.fullstacksecurity.alarm_control_panel
+    
     # Store options for the alarm panel to use
     hass.data[DOMAIN][entry.entry_id] = entry.options
 
