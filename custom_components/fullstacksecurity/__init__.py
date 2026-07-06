@@ -19,6 +19,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Pre-import to avoid blocking call warning in HA core
     import custom_components.fullstacksecurity.alarm_control_panel
     
+    # Serve the custom Lovelace card directly from the integration folder
+    hass.http.register_static_path(
+        "/fullstacksecurity_card",
+        hass.config.path("custom_components/fullstacksecurity/www"),
+        cache_headers=False
+    )
+    
     # Store options for the alarm panel to use
     hass.data[DOMAIN][entry.entry_id] = entry.options
 
