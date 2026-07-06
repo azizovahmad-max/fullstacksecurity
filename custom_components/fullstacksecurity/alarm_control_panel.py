@@ -38,6 +38,12 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
         self._sirens = options.get("sirens", [])
         self._lights = options.get("lights", [])
         self._buttons = options.get("buttons", [])
+        self._arming_delay = int(options.get("arming_delay", 30))
+        self._button_mappings = {
+            "single": options.get("button_single", "arm"),
+            "double": options.get("button_double", "disarm"),
+            "triple": options.get("button_triple", "none")
+        }
         
         notify_option = options.get("notify", "")
         self._notifiers = [n.strip() for n in notify_option.split(",") if n.strip()] if notify_option else []
@@ -64,9 +70,10 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
             # Handle buttons
             if entity_id in self._buttons:
                 action = new_state.state.lower()
-                if action == "single":
+                mapped_action = self._button_mappings.get(action, "none")
+                if mapped_action == "arm":
                     self.hass.async_create_task(self.async_alarm_arm_away())
-                elif action == "double":
+                elif mapped_action == "disarm":
                     self.hass.async_create_task(self.async_alarm_disarm())
 
         # Track all configured sensors and buttons
@@ -96,6 +103,10 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
             "sirens": self._sirens,
             "lights": self._lights,
             "buttons": self._buttons,
+            "arming_delay": self._arming_delay,
+            "button_single": self._button_mappings["single"],
+            "button_double": self._button_mappings["double"],
+            "button_triple": self._button_mappings["triple"],
         }
 
     @property
@@ -141,7 +152,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
 
         self._state = AlarmControlPanelState.ARMING
         self.async_write_ha_state()
-        _LOGGER.info("FullStackSecurity is arming. 30 seconds delay.")
+        _LOGGER.info(f"FullStackSecurity is arming. {self._arming_delay} seconds delay.")
 
         @callback
         def _arm_system(now):
@@ -150,7 +161,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
             self.async_write_ha_state()
             _LOGGER.info("FullStackSecurity is now armed away.")
 
-        self._arming_timer = async_call_later(self.hass, 30, _arm_system)
+        self._arming_timer = async_call_later(self.hass, self._arming_delay, _arm_system)
 
     async def _async_trigger_alarm(self, trigger_entity):
         """Trigger the alarm."""
