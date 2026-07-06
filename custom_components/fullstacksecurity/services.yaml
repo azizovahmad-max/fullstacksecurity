@@ -1,0 +1,36 @@
+update_config:
+  name: Update configuration
+  description: >-
+    Used by the Security sidebar panel to add/remove entities and save
+    settings. Can also be called from automations/scripts.
+  fields:
+    action:
+      name: Action
+      description: One of add, remove or settings.
+      required: true
+      example: add
+      selector:
+        select:
+          options:
+            - add
+            - remove
+            - settings
+    type:
+      name: List
+      description: Which entity list to modify (for add/remove).
+      example: doors
+      selector:
+        select:
+          options:
+            - doors
+            - vibration
+            - flood
+            - sirens
+            - lights
+            - buttons
+    entity_id:
+      name: Entity
+      description: The entity to add or remove (for add/remove).
+      example: binary_sensor.front_door_contact
+      selector:
+        entity: {}

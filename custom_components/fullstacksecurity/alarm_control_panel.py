@@ -1,251 +1,396 @@
+"""Alarm control panel entity for FullStack Security."""
+
+from __future__ import annotations
+
 import logging
 from datetime import timedelta
+
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelEntityFeature,
     AlarmControlPanelState,
 )
-from homeassistant.const import (
-    STATE_ON,
-    STATE_OFF,
-    ATTR_ENTITY_ID,
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_ENTITY_ID, STATE_ON
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_state_change_event,
 )
-from homeassistant.helpers.event import async_track_state_change_event, async_call_later
-from homeassistant.core import callback
+from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.util import dt as dt_util
+
+from .const import (
+    CONF_ARMING_DELAY,
+    CONF_BUTTON_DOUBLE,
+    CONF_BUTTON_HOLD,
+    CONF_BUTTON_SINGLE,
+    CONF_BUTTON_TRIPLE,
+    CONF_BUTTONS,
+    CONF_DOORS,
+    CONF_ENTRY_DELAY,
+    CONF_FLOOD,
+    CONF_FLOOD_SIREN,
+    CONF_LIGHT_DURATION,
+    CONF_LIGHT_MODE,
+    CONF_LIGHTS,
+    CONF_SIREN_DURATION,
+    CONF_SIREN_TONE,
+    CONF_SIRENS,
+    CONF_VIBRATION,
+    DOMAIN,
+    EVENT_TRIGGERED,
+    get_notify_services,
+    opt,
+)
+from .helpers import async_notify_all, async_sirens_off, async_sirens_on, friendly_name
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "fullstacksecurity"
+RESTORABLE_STATES = {
+    AlarmControlPanelState.ARMED_AWAY,
+    AlarmControlPanelState.TRIGGERED,
+}
 
-async def async_setup_entry(hass, config_entry, async_add_entities):
-    """Set up the FullStackSecurity alarm control panel from a config entry."""
-    options = config_entry.options
-    async_add_entities([FullStackSecurityAlarm(hass, options, config_entry.entry_id)])
 
-class FullStackSecurityAlarm(AlarmControlPanelEntity):
-    """Representation of a FullStackSecurity alarm."""
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """Set up the alarm panel from a config entry."""
+    async_add_entities([FullStackSecurityAlarm(entry)])
 
-    def __init__(self, hass, options, entry_id):
-        """Initialize the alarm."""
-        self.hass = hass
-        self._name = "FullStack Security"
-        self._attr_unique_id = entry_id
-        self._attr_code_arm_required = False
-        self._state = AlarmControlPanelState.DISARMED
-        
-        self._doors = options.get("doors", [])
-        self._vibrations = options.get("vibration", [])
-        self._sirens = options.get("sirens", [])
-        self._lights = options.get("lights", [])
-        self._buttons = options.get("buttons", [])
-        self._arming_delay = int(options.get("arming_delay", 30))
-        self._button_mappings = {
-            "single": options.get("button_single", "arm"),
-            "double": options.get("button_double", "disarm"),
-            "triple": options.get("button_triple", "none")
+
+def _classify_button_press(raw: str) -> str | None:
+    """Map a zigbee2mqtt button action value to single/double/triple/hold."""
+    value = (raw or "").lower()
+    if not value or value in ("unknown", "unavailable", "none"):
+        return None
+    if "triple" in value:
+        return "triple"
+    if "double" in value:
+        return "double"
+    if "hold" in value or "long" in value:
+        return "hold"
+    if "single" in value or "press" in value or value in ("on", "click", "toggle"):
+        return "single"
+    return None
+
+
+class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
+    """The armed/disarmed brain of the security system."""
+
+    _attr_name = "FullStack Security"
+    _attr_should_poll = False
+    _attr_code_arm_required = False
+    _attr_code_format = None
+    _attr_supported_features = (
+        AlarmControlPanelEntityFeature.ARM_AWAY | AlarmControlPanelEntityFeature.TRIGGER
+    )
+    _attr_icon = "mdi:shield-home"
+
+    def __init__(self, entry: ConfigEntry) -> None:
+        options = entry.options
+        self._attr_unique_id = entry.entry_id
+        self._attr_alarm_state = AlarmControlPanelState.DISARMED
+
+        self._doors: list[str] = list(opt(options, CONF_DOORS))
+        self._vibration: list[str] = list(opt(options, CONF_VIBRATION))
+        self._flood: list[str] = list(opt(options, CONF_FLOOD))
+        self._sirens: list[str] = list(opt(options, CONF_SIRENS))
+        self._lights: list[str] = list(opt(options, CONF_LIGHTS))
+        self._buttons: list[str] = list(opt(options, CONF_BUTTONS))
+
+        self._arming_delay = int(opt(options, CONF_ARMING_DELAY))
+        self._entry_delay = int(opt(options, CONF_ENTRY_DELAY))
+        self._siren_duration = int(opt(options, CONF_SIREN_DURATION))
+        self._siren_tone = str(opt(options, CONF_SIREN_TONE))
+        self._light_mode = str(opt(options, CONF_LIGHT_MODE))
+        self._light_duration = int(opt(options, CONF_LIGHT_DURATION))
+        self._flood_siren = bool(opt(options, CONF_FLOOD_SIREN))
+        self._notify_services = get_notify_services(options)
+        self._button_actions = {
+            "single": opt(options, CONF_BUTTON_SINGLE),
+            "double": opt(options, CONF_BUTTON_DOUBLE),
+            "triple": opt(options, CONF_BUTTON_TRIPLE),
+            "hold": opt(options, CONF_BUTTON_HOLD),
         }
-        
-        # Trigger Actions
-        self._siren_duration = int(options.get("siren_duration", 0))
-        self._siren_tone = options.get("siren_tone", "")
-        self._flash_lights = options.get("flash_lights", [])
-        self._light_mode = options.get("light_mode", "flash_long")
-        self._light_duration = options.get("light_duration", 0)
-        notify_phones_str = options.get("notify_phones", "")
-        self._notify_phones = [n.strip() for n in notify_phones_str.split(",") if n.strip()] if notify_phones_str else []
-        self._bg_color = options.get("bg_color", "default")
-        
-        notify_option = options.get("notify", "")
-        self._notifiers = [n.strip() for n in notify_option.split(",") if n.strip()] if notify_option else []
-        
-        self._arming_timer = None
-        self._unsub_listener = None
 
-    async def async_added_to_hass(self):
-        """Run when entity about to be added to hass."""
-        
-        @callback
-        def async_sensor_changed(event):
-            """Handle sensor state changes."""
-            entity_id = event.data.get("entity_id")
-            new_state = event.data.get("new_state")
-            if new_state is None:
-                return
+        self._delay_ends_at = None
+        self._delay_total = 0
+        self._last_triggered_by: str | None = None
+        self._timer_cancel = None
 
-            # Handle security sensors (doors, vibration)
-            if entity_id in self._doors or entity_id in self._vibrations:
-                if self._state == AlarmControlPanelState.ARMED_AWAY and new_state.state == STATE_ON:
-                    self.hass.async_create_task(self._async_trigger_alarm(entity_id))
-            
-            # Handle buttons
-            if entity_id in self._buttons:
-                action = new_state.state.lower()
-                mapped_action = self._button_mappings.get(action, "none")
-                if mapped_action == "arm":
-                    self.hass.async_create_task(self.async_alarm_arm_away())
-                elif mapped_action == "disarm":
-                    self.hass.async_create_task(self.async_alarm_disarm())
+    # ------------------------------------------------------------------ setup
 
-        # Track all configured sensors and buttons
-        all_entities = self._doors + self._vibrations + self._buttons
-        if all_entities:
-            self._unsub_listener = async_track_state_change_event(
-                self.hass, all_entities, async_sensor_changed
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+
+        last = await self.async_get_last_state()
+        if last and last.state in [s.value for s in RESTORABLE_STATES]:
+            self._attr_alarm_state = AlarmControlPanelState(last.state)
+            _LOGGER.info("Restored alarm state: %s", last.state)
+
+        watched = self._doors + self._vibration + self._buttons
+        if watched:
+            self.async_on_remove(
+                async_track_state_change_event(self.hass, watched, self._watched_changed)
             )
-            self.async_on_remove(self._unsub_listener)
 
-    @property
-    def name(self):
-        """Return the name of the device."""
-        return self._name
+    async def async_will_remove_from_hass(self) -> None:
+        self._cancel_timer()
 
-    @property
-    def state(self):
-        """Return the state of the device."""
-        return self._state
+    def _cancel_timer(self) -> None:
+        if self._timer_cancel:
+            self._timer_cancel()
+            self._timer_cancel = None
+        self._delay_ends_at = None
+        self._delay_total = 0
+
+    # ------------------------------------------------------------- attributes
 
     @property
     def extra_state_attributes(self):
-        """Return the state attributes."""
+        open_sensors = [
+            e
+            for e in self._doors + self._vibration
+            if (s := self.hass.states.get(e)) and s.state == STATE_ON
+        ]
         return {
             "doors": self._doors,
-            "vibration": self._vibrations,
+            "vibration": self._vibration,
+            "flood": self._flood,
             "sirens": self._sirens,
             "lights": self._lights,
             "buttons": self._buttons,
             "arming_delay": self._arming_delay,
-            "button_single": self._button_mappings["single"],
-            "button_double": self._button_mappings["double"],
-            "button_triple": self._button_mappings["triple"],
+            "entry_delay": self._entry_delay,
             "siren_duration": self._siren_duration,
             "siren_tone": self._siren_tone,
-            "flash_lights": self._flash_lights,
             "light_mode": self._light_mode,
             "light_duration": self._light_duration,
-            "notify_phones": ",".join(self._notify_phones),
-            "bg_color": self._bg_color,
+            "flood_siren": self._flood_siren,
+            "notify_services": self._notify_services,
+            "button_single": self._button_actions["single"],
+            "button_double": self._button_actions["double"],
+            "button_triple": self._button_actions["triple"],
+            "button_hold": self._button_actions["hold"],
+            "open_sensors": open_sensors,
+            "delay_ends_at": self._delay_ends_at.isoformat() if self._delay_ends_at else None,
+            "delay_total": self._delay_total,
+            "last_triggered_by": self._last_triggered_by,
         }
 
-    @property
-    def supported_features(self) -> int:
-        """Return the list of supported features."""
-        return AlarmControlPanelEntityFeature.ARM_AWAY
+    # ----------------------------------------------------------- sensor logic
 
-    async def async_alarm_disarm(self, code=None):
-        """Send disarm command."""
-        self._state = AlarmControlPanelState.DISARMED
-        if self._arming_timer:
-            self._arming_timer()
-            self._arming_timer = None
-        
-        # Turn off sirens and lights
-        if self._sirens:
-            await self.hass.services.async_call("homeassistant", "turn_off", {ATTR_ENTITY_ID: self._sirens}, blocking=False)
-        if self._lights:
-            await self.hass.services.async_call("homeassistant", "turn_off", {ATTR_ENTITY_ID: self._lights}, blocking=False)
-        if self._flash_lights:
-            await self.hass.services.async_call("homeassistant", "turn_off", {ATTR_ENTITY_ID: self._flash_lights}, blocking=False)
-            
-        self.async_write_ha_state()
-        _LOGGER.info("FullStackSecurity is disarmed.")
-
-    async def async_alarm_arm_away(self, code=None):
-        """Send arm away command."""
-        # Check if all sensors are closed/still
-        open_sensors = []
-        for sensor_id in (self._doors + self._vibrations):
-            state = self.hass.states.get(sensor_id)
-            if state and state.state == STATE_ON:
-                open_sensors.append(sensor_id)
-        
-        if open_sensors:
-            _LOGGER.warning(f"Cannot arm FullStackSecurity. Sensors are open: {open_sensors}")
-            for notifier in self._notifiers:
-                domain, service = notifier.split(".", 1)
-                await self.hass.services.async_call(
-                    domain, service,
-                    {"message": f"Cannot arm system. Sensors open: {', '.join(open_sensors)}"},
-                    blocking=False
-                )
+    @callback
+    def _watched_changed(self, event) -> None:
+        entity_id = event.data.get("entity_id")
+        new_state = event.data.get("new_state")
+        old_state = event.data.get("old_state")
+        if new_state is None or old_state is None:
+            # Ignore startup/registration churn so a HA restart can't arm or
+            # trigger anything by itself.
             return
 
-        self._state = AlarmControlPanelState.ARMING
+        if entity_id in self._buttons:
+            self._handle_button(new_state)
+            return
+
+        if new_state.state != STATE_ON:
+            # A sensor closing never changes the alarm, but the open_sensors
+            # attribute should refresh for the UI.
+            self.async_write_ha_state()
+            return
+
+        state = self._attr_alarm_state
+        if state == AlarmControlPanelState.ARMED_AWAY:
+            if self._entry_delay > 0:
+                self._start_entry_delay(entity_id)
+            else:
+                self.hass.async_create_task(self._async_trigger(entity_id))
+        elif state == AlarmControlPanelState.DISARMED:
+            self.async_write_ha_state()
+
+    @callback
+    def _handle_button(self, new_state) -> None:
+        if new_state.domain == "event" or new_state.entity_id.startswith("event."):
+            raw = new_state.attributes.get("event_type", "")
+        else:
+            raw = new_state.state
+        press = _classify_button_press(str(raw))
+        if press is None:
+            return
+        action = self._button_actions.get(press, "none")
+        _LOGGER.debug("Button %s: %s -> %s", new_state.entity_id, raw, action)
+        if action == "toggle":
+            action = (
+                "disarm"
+                if self._attr_alarm_state != AlarmControlPanelState.DISARMED
+                else "arm"
+            )
+        if action == "arm":
+            self.hass.async_create_task(self.async_alarm_arm_away())
+        elif action == "disarm":
+            self.hass.async_create_task(self.async_alarm_disarm())
+
+    # ------------------------------------------------------------ arm/disarm
+
+    async def async_alarm_arm_away(self, code=None) -> None:
+        if self._attr_alarm_state not in (
+            AlarmControlPanelState.DISARMED,
+            AlarmControlPanelState.ARMING,
+        ):
+            return
+
+        open_sensors = [
+            e
+            for e in self._doors + self._vibration
+            if (s := self.hass.states.get(e)) and s.state == STATE_ON
+        ]
+        if open_sensors:
+            names = ", ".join(friendly_name(self.hass, e) for e in open_sensors)
+            _LOGGER.warning("Cannot arm, sensors open: %s", names)
+            await async_notify_all(
+                self.hass,
+                self._notify_services,
+                "Security",
+                f"Cannot arm - open: {names}",
+            )
+            self.async_write_ha_state()
+            return
+
+        if self._arming_delay <= 0:
+            self._set_armed()
+            return
+
+        self._cancel_timer()
+        self._attr_alarm_state = AlarmControlPanelState.ARMING
+        self._delay_total = self._arming_delay
+        self._delay_ends_at = dt_util.utcnow() + timedelta(seconds=self._arming_delay)
         self.async_write_ha_state()
-        _LOGGER.info(f"FullStackSecurity is arming. {self._arming_delay} seconds delay.")
 
         @callback
-        def _arm_system(now):
-            self._state = AlarmControlPanelState.ARMED_AWAY
-            self._arming_timer = None
-            self.async_write_ha_state()
-            _LOGGER.info("FullStackSecurity is now armed away.")
+        def _finish_arming(_now) -> None:
+            self._timer_cancel = None
+            self._set_armed()
 
-        self._arming_timer = async_call_later(self.hass, self._arming_delay, _arm_system)
+        self._timer_cancel = async_call_later(self.hass, self._arming_delay, _finish_arming)
 
-    async def _async_trigger_alarm(self, trigger_entity):
-        """Trigger the alarm."""
-        self._state = AlarmControlPanelState.TRIGGERED
+    @callback
+    def _set_armed(self) -> None:
+        self._cancel_timer()
+        self._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY
         self.async_write_ha_state()
-        _LOGGER.warning(f"FullStackSecurity TRIGGERED by {trigger_entity}!")
+        _LOGGER.info("FullStack Security armed (away)")
 
-        # Turn on sirens
-        if self._sirens:
-            service_data = {ATTR_ENTITY_ID: self._sirens}
-            if self._siren_duration:
-                service_data["duration"] = self._siren_duration
-            if self._siren_tone:
-                service_data["tone"] = self._siren_tone
-                
-            try:
-                await self.hass.services.async_call("siren", "turn_on", service_data, blocking=False)
-            except Exception as e:
-                _LOGGER.error("Failed to call siren.turn_on: %s", e)
-                
-            # Fallback for switches disguised as sirens
-            await self.hass.services.async_call("homeassistant", "turn_on", {ATTR_ENTITY_ID: self._sirens}, blocking=False)
-        
-        # Turn on lights
-        if self._lights:
-            await self.hass.services.async_call("homeassistant", "turn_on", {ATTR_ENTITY_ID: self._lights}, blocking=False)
-            
-        # Action Lights
-        if self._flash_lights:
-            service_data = {ATTR_ENTITY_ID: self._flash_lights}
-            if self._light_mode == "flash_long":
-                service_data["flash"] = "long"
-            elif self._light_mode == "flash_short":
-                service_data["flash"] = "short"
-            elif self._light_mode == "solid_red":
-                service_data["color_name"] = "red"
-            elif self._light_mode == "solid_white":
-                service_data["color_name"] = "white"
-                
-            try:
-                await self.hass.services.async_call("light", "turn_on", service_data, blocking=False)
-            except Exception as e:
-                _LOGGER.error("Failed to turn on action lights: %s", e)
-                
-            if int(self._light_duration) > 0:
-                @callback
-                def _turn_off_action_lights(now):
-                    if self._state == AlarmControlPanelState.TRIGGERED:
-                        self.hass.async_create_task(
-                            self.hass.services.async_call("homeassistant", "turn_off", {ATTR_ENTITY_ID: self._flash_lights}, blocking=False)
-                        )
-                async_call_later(self.hass, int(self._light_duration), _turn_off_action_lights)
-        
-        # Notify
-        friendly_name = trigger_entity
-        state_obj = self.hass.states.get(trigger_entity)
-        if state_obj and state_obj.name:
-            friendly_name = state_obj.name
+    async def async_alarm_disarm(self, code=None) -> None:
+        was = self._attr_alarm_state
+        self._cancel_timer()
+        self._attr_alarm_state = AlarmControlPanelState.DISARMED
+        self._last_triggered_by = None
+        self.async_write_ha_state()
+        _LOGGER.info("FullStack Security disarmed")
 
-        all_notifiers = set(self._notifiers + self._notify_phones)
-        for notifier in all_notifiers:
-            if "." in notifier:
-                domain, service = notifier.split(".", 1)
+        if was == AlarmControlPanelState.TRIGGERED:
+            await async_sirens_off(self.hass, self._sirens)
+            if self._lights:
                 await self.hass.services.async_call(
-                    domain, service,
-                    {"message": f"ALARM TRIGGERED! Sensor {friendly_name} detected activity."},
-                    blocking=False
+                    "homeassistant",
+                    "turn_off",
+                    {ATTR_ENTITY_ID: self._lights},
+                    blocking=False,
                 )
+
+    async def async_alarm_trigger(self, code=None) -> None:
+        await self._async_trigger("manual")
+
+    # ---------------------------------------------------------- entry delay
+
+    @callback
+    def _start_entry_delay(self, entity_id: str) -> None:
+        self._cancel_timer()
+        self._attr_alarm_state = AlarmControlPanelState.PENDING
+        self._last_triggered_by = entity_id
+        self._delay_total = self._entry_delay
+        self._delay_ends_at = dt_util.utcnow() + timedelta(seconds=self._entry_delay)
+        self.async_write_ha_state()
+        _LOGGER.info("Entry delay started by %s (%ss)", entity_id, self._entry_delay)
+
+        @callback
+        def _entry_expired(_now) -> None:
+            self._timer_cancel = None
+            if self._attr_alarm_state == AlarmControlPanelState.PENDING:
+                self.hass.async_create_task(self._async_trigger(entity_id))
+
+        self._timer_cancel = async_call_later(self.hass, self._entry_delay, _entry_expired)
+
+    # -------------------------------------------------------------- trigger
+
+    async def _async_trigger(self, source_entity: str) -> None:
+        if self._attr_alarm_state == AlarmControlPanelState.DISARMED:
+            return
+        self._cancel_timer()
+        self._attr_alarm_state = AlarmControlPanelState.TRIGGERED
+        self._last_triggered_by = source_entity
+        self.async_write_ha_state()
+
+        name = (
+            "manual trigger"
+            if source_entity == "manual"
+            else friendly_name(self.hass, source_entity)
+        )
+        _LOGGER.warning("ALARM TRIGGERED by %s", name)
+        self.hass.bus.async_fire(EVENT_TRIGGERED, {"source": source_entity, "name": name})
+
+        await async_sirens_on(self.hass, self._sirens, self._siren_tone, self._siren_duration)
+
+        if self._siren_duration > 0 and self._sirens:
+
+            @callback
+            def _siren_timeout(_now) -> None:
+                if self._attr_alarm_state == AlarmControlPanelState.TRIGGERED:
+                    self.hass.async_create_task(async_sirens_off(self.hass, self._sirens))
+
+            async_call_later(self.hass, self._siren_duration, _siren_timeout)
+
+        if self._lights:
+            data: dict = {ATTR_ENTITY_ID: self._lights}
+            if self._light_mode == "flash_long":
+                data["flash"] = "long"
+            elif self._light_mode == "flash_short":
+                data["flash"] = "short"
+            elif self._light_mode == "solid_red":
+                data["color_name"] = "red"
+            elif self._light_mode == "solid_white":
+                data["color_name"] = "white"
+            try:
+                await self.hass.services.async_call("light", "turn_on", data, blocking=False)
+            except Exception as err:  # noqa: BLE001 - bad flash/color support varies
+                _LOGGER.warning("Light action failed (%s), retrying plain turn_on", err)
+                await self.hass.services.async_call(
+                    "light", "turn_on", {ATTR_ENTITY_ID: self._lights}, blocking=False
+                )
+
+            if self._light_duration > 0:
+
+                @callback
+                def _lights_timeout(_now) -> None:
+                    if self._attr_alarm_state == AlarmControlPanelState.TRIGGERED:
+                        self.hass.async_create_task(
+                            self.hass.services.async_call(
+                                "homeassistant",
+                                "turn_off",
+                                {ATTR_ENTITY_ID: self._lights},
+                                blocking=False,
+                            )
+                        )
+
+                async_call_later(self.hass, self._light_duration, _lights_timeout)
+
+        await async_notify_all(
+            self.hass,
+            self._notify_services,
+            "🚨 ALARM TRIGGERED",
+            f"{name} detected activity while the system was armed.",
+        )

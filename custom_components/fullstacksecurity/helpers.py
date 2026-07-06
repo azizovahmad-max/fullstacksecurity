@@ -1,0 +1,71 @@
+"""Shared helpers for FullStack Security."""
+
+from __future__ import annotations
+
+import logging
+
+from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.core import HomeAssistant
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def friendly_name(hass: HomeAssistant, entity_id: str) -> str:
+    """Return the friendly name of an entity, falling back to its id."""
+    state = hass.states.get(entity_id)
+    if state and state.name:
+        return state.name
+    return entity_id
+
+
+async def async_notify_all(
+    hass: HomeAssistant, services: list[str], title: str, message: str
+) -> None:
+    """Send a notification through every configured notify service."""
+    for notifier in services:
+        if "." not in notifier:
+            notifier = f"notify.{notifier}"
+        domain, service = notifier.split(".", 1)
+        try:
+            await hass.services.async_call(
+                domain,
+                service,
+                {"title": title, "message": message},
+                blocking=False,
+            )
+        except Exception as err:  # noqa: BLE001 - one bad notifier must not stop the rest
+            _LOGGER.error("Failed to notify via %s: %s", notifier, err)
+
+
+async def async_sirens_on(
+    hass: HomeAssistant, sirens: list[str], tone: str, duration: int
+) -> None:
+    """Turn on sirens; real siren entities get tone/duration, switches a plain on."""
+    real_sirens = [e for e in sirens if e.startswith("siren.")]
+    others = [e for e in sirens if not e.startswith("siren.")]
+
+    if real_sirens:
+        data: dict = {ATTR_ENTITY_ID: real_sirens}
+        if tone:
+            data["tone"] = tone
+        if duration:
+            data["duration"] = duration
+        try:
+            await hass.services.async_call("siren", "turn_on", data, blocking=False)
+        except Exception as err:  # noqa: BLE001 - some sirens reject tone/duration
+            _LOGGER.warning("siren.turn_on with options failed (%s), retrying plain", err)
+            await hass.services.async_call(
+                "siren", "turn_on", {ATTR_ENTITY_ID: real_sirens}, blocking=False
+            )
+    if others:
+        await hass.services.async_call(
+            "homeassistant", "turn_on", {ATTR_ENTITY_ID: others}, blocking=False
+        )
+
+
+async def async_sirens_off(hass: HomeAssistant, sirens: list[str]) -> None:
+    """Turn off all configured sirens."""
+    if sirens:
+        await hass.services.async_call(
+            "homeassistant", "turn_off", {ATTR_ENTITY_ID: sirens}, blocking=False
+        )

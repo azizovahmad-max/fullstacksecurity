@@ -1,12 +1,13 @@
 {
   "domain": "fullstacksecurity",
   "name": "FullStack Security",
-  "version": "1.0.32",
-  "documentation": "https://github.com/your-username/fullstacksecurity",
-  "dependencies": [],
-  "codeowners": [],
-  "requirements": [],
-  "iot_class": "local_push",
+  "codeowners": ["@azizovahmad-max"],
+  "config_flow": true,
+  "dependencies": ["http", "frontend"],
+  "documentation": "https://github.com/azizovahmad-max/fullstacksecurity",
   "integration_type": "hub",
-  "config_flow": true
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/azizovahmad-max/fullstacksecurity/issues",
+  "requirements": [],
+  "version": "2.0.0"
 }
