@@ -1,22 +1,14 @@
-import logging
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.components.http import HomeAssistantView
-from homeassistant.components.frontend import async_register_built_in_panel, async_remove_panel
-from aiohttp import web
+import json
 
-_LOGGER = logging.getLogger(__name__)
+# 1. Update manifest.json
+with open("custom_components/fullstacksecurity/manifest.json", "r") as f:
+    manifest = json.load(f)
+manifest["version"] = "1.0.4"
+with open("custom_components/fullstacksecurity/manifest.json", "w") as f:
+    json.dump(manifest, f, indent=2)
 
-DOMAIN = "fullstacksecurity"
-PLATFORMS = ["alarm_control_panel"]
-
-class FullStackSecurityCardView(HomeAssistantView):
-    url = "/fullstacksecurity_card/fullstacksecurity-card.js"
-    name = "fullstacksecurity_card"
-    requires_auth = False
-
-    async def get(self, request):
-        js = """class FullStackSecurityCard extends HTMLElement {
+# 2. Rewrite __init__.py
+js_code = """class FullStackSecurityCard extends HTMLElement {
   set panel(panel) {
     this._panel = panel;
     if (panel && panel.config) {
@@ -263,16 +255,36 @@ window.customCards.push({
   description: "A custom card and panel for the FullStack Security plugin."
 });
 """
+
+init_content = f"""import logging
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.components.http import HomeAssistantView
+from homeassistant.components.frontend import async_register_built_in_panel, async_remove_panel
+from aiohttp import web
+
+_LOGGER = logging.getLogger(__name__)
+
+DOMAIN = "fullstacksecurity"
+PLATFORMS = ["alarm_control_panel"]
+
+class FullStackSecurityCardView(HomeAssistantView):
+    url = "/fullstacksecurity_card/fullstacksecurity-card.js"
+    name = "fullstacksecurity_card"
+    requires_auth = False
+
+    async def get(self, request):
+        js = \"\"\"{js_code}\"\"\"
         return web.Response(body=js, content_type="application/javascript")
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up the FullStackSecurity component."""
-    hass.data.setdefault(DOMAIN, {})
+    \"\"\"Set up the FullStackSecurity component.\"\"\"
+    hass.data.setdefault(DOMAIN, {{}})
     return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up FullStackSecurity from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
+    \"\"\"Set up FullStackSecurity from a config entry.\"\"\"
+    hass.data.setdefault(DOMAIN, {{}})
     
     # Pre-import to avoid blocking call warning in HA core
     import custom_components.fullstacksecurity.alarm_control_panel
@@ -291,16 +303,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         sidebar_title="Security",
         sidebar_icon="mdi:shield-home",
         frontend_url_path="fullstacksecurity",
-        config={
-            "_panel_custom": {
+        config={{
+            "_panel_custom": {{
                 "name": "fullstacksecurity-card",
                 "js_url": "/fullstacksecurity_card/fullstacksecurity-card.js",
                 "embed_iframe": False,
                 "trust_external": False,
-            },
+            }},
             "entity": f"alarm_control_panel.full_stack_security",
             "sensors": sensors
-        },
+        }},
         require_admin=False,
     )
 
@@ -312,7 +324,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
+    \"\"\"Unload a config entry.\"\"\"
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
@@ -320,5 +332,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload config entry when options change."""
+    \"\"\"Reload config entry when options change.\"\"\"
     await hass.config_entries.async_reload(entry.entry_id)
+"""
+
+with open("custom_components/fullstacksecurity/__init__.py", "w") as f:
+    f.write(init_content)
