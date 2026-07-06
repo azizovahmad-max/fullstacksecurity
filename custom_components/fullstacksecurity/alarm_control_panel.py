@@ -51,6 +51,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
         self._flash_lights = options.get("flash_lights", [])
         notify_phones_str = options.get("notify_phones", "")
         self._notify_phones = [n.strip() for n in notify_phones_str.split(",") if n.strip()] if notify_phones_str else []
+        self._bg_color = options.get("bg_color", "default")
         
         notify_option = options.get("notify", "")
         self._notifiers = [n.strip() for n in notify_option.split(",") if n.strip()] if notify_option else []
@@ -118,6 +119,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
             "siren_tone": self._siren_tone,
             "flash_lights": self._flash_lights,
             "notify_phones": ",".join(self._notify_phones),
+            "bg_color": self._bg_color,
         }
 
     @property

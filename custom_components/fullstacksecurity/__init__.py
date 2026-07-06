@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v21.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v22.js")
         
         js_content = """class FullStackSecurityCardV16 extends HTMLElement {
   set panel(panel) {
@@ -54,8 +54,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             box-sizing: border-box;
           }
           ha-card {
-            background: var(--glass-bg, rgba(30, 41, 59, 0.9));
-            border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+            background: var(--ha-card-background, var(--card-background-color, #1e1e2e));
+            border: 1px solid var(--ha-card-border-color, rgba(255, 255, 255, 0.1));
             border-radius: var(--ha-card-border-radius, 16px);
             padding: 20px;
             color: #f8fafc;
@@ -318,6 +318,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
               </div>
               
               <div id="content-general">
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Background Color:</label>
+                <select id="bg-color-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                  <option value="default">System Default</option>
+                  <option value="black">Solid Black</option>
+                  <option value="white">Solid White</option>
+                  <option value="transparent">Transparent</option>
+                </select>
+                
                 <label style="display:block; margin-bottom: 5px; color: #ccc;">Arming Delay (seconds):</label>
                 <input type="number" id="arming-delay-input" min="0" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
                 
@@ -440,6 +448,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       
       this.settingsBtn.addEventListener('click', () => {
         const attrs = this._hass.states[this._entityId]?.attributes || {};
+        this.querySelector('#bg-color-select').value = attrs.bg_color || 'default';
         this.querySelector('#arming-delay-input').value = attrs.arming_delay || 30;
         this.querySelector('#btn-single-select').value = attrs.button_single || 'arm';
         this.querySelector('#btn-double-select').value = attrs.button_double || 'disarm';
@@ -481,6 +490,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       });
       
       this.saveSettingsBtn.addEventListener('click', () => {
+        const bg_color = this.querySelector('#bg-color-select').value;
         const delay = this.querySelector('#arming-delay-input').value;
         const single = this.querySelector('#btn-single-select').value;
         const double = this.querySelector('#btn-double-select').value;
@@ -494,6 +504,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         this.saveSettingsBtn.innerText = 'Saving...';
         this._hass.callService("fullstacksecurity", "update_config", {
             action: 'settings',
+            bg_color: bg_color,
             arming_delay: parseInt(delay),
             button_single: single,
             button_double: double,
@@ -536,6 +547,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     this.updateStatus(this._state);
     
     const attrs = stateObj.attributes || {};
+    if (attrs.bg_color && attrs.bg_color !== 'default') {
+        if (attrs.bg_color === 'transparent') {
+            this.mainContainer.style.background = 'transparent';
+        } else {
+            this.mainContainer.style.background = attrs.bg_color;
+        }
+    } else {
+        this.mainContainer.style.background = ''; // use CSS default
+    }
+    
     const doors = attrs.doors || [];
     const vibrations = attrs.vibration || [];
     const sirens = attrs.sirens || [];
@@ -736,7 +757,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v21.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v22.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
@@ -760,6 +781,8 @@ window.customCards.push({
         
         if action == "settings":
             new_options = dict(entry.options)
+            if "bg_color" in call.data:
+                new_options["bg_color"] = call.data.get("bg_color")
             if "arming_delay" in call.data:
                 new_options["arming_delay"] = call.data.get("arming_delay")
             if "button_single" in call.data:
