@@ -1,7 +1,7 @@
 """Constants for the FullStack Security integration."""
 
 DOMAIN = "fullstacksecurity"
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 
 PANEL_URL_PATH = "fullstacksecurity"
 PANEL_NAME = "fullstacksecurity-panel"

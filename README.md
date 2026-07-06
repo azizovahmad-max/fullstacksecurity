@@ -75,8 +75,10 @@ Copy `custom_components/fullstacksecurity` into your Home Assistant
 
 ## How it behaves
 
-- **Arming**: refuses to arm (and notifies you) if a door is open. Otherwise
-  counts down the exit delay, then arms.
+- **Arming**: refuses to arm (and notifies you) if any security sensor is
+  open **or offline/dead** — the dashboard shows exactly which ones and
+  disables the arm button until they're fixed. Otherwise counts down the
+  exit delay, then arms.
 - **While armed**: a door opening or vibration starts the entry delay
   countdown — disarm in time or the sirens, lights and notifications fire.
 - **Sirens** run for the configured duration (or until disarmed).

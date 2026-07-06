@@ -144,7 +144,9 @@
     _deviceState(listKey, entityId) {
       const s = this._hass.states[entityId];
       if (!s || s.state === "unavailable" || s.state === "unknown") {
-        return { text: "UNAVAILABLE", cls: "idle" };
+        // A dead security/flood sensor is a real problem, not a neutral state.
+        const critical = ["doors", "vibration", "flood"].includes(listKey);
+        return { text: "OFFLINE", cls: critical ? "alert static" : "idle" };
       }
       const on = s.state === "on";
       switch (listKey) {
@@ -300,6 +302,15 @@
         }
         #main-btn:hover { filter: brightness(1.1); }
         #main-btn:active { transform: scale(.98); }
+        #main-btn:disabled { opacity: .4; cursor: not-allowed; filter: none; transform: none; }
+        #ready-box { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 14px; }
+        #ready-box[hidden] { display: none; }
+        .ready-chip {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 6px 12px; border-radius: 99px; font-size: 12px; font-weight: 700;
+          color: var(--fss-red); background: color-mix(in srgb, var(--fss-red) 13%, transparent);
+        }
+        .ready-chip ha-icon { --mdc-icon-size: 15px; color: inherit; }
         .st-disarmed { --st-color: var(--fss-green); }
         .st-arming { --st-color: var(--fss-amber); }
         .st-pending { --st-color: var(--fss-amber); }
@@ -455,6 +466,7 @@
             <ha-icon id="hero-icon" icon="mdi:shield-off-outline"></ha-icon>
             <div id="hero-state">&nbsp;</div>
             <div id="hero-sub"></div>
+            <div id="ready-box" hidden></div>
             <div id="countdown" hidden>
               <div id="countdown-text"></div>
               <div class="bar"><div id="bar-fill"></div></div>
@@ -669,8 +681,12 @@
       if (!alarm) return;
       if (alarm.state === "disarmed") {
         const open = (alarm.attributes.open_sensors || []);
-        if (open.length) {
-          this._toast(`Cannot arm — open: ${open.map((e) => this._name(e)).join(", ")}`, false);
+        const dead = (alarm.attributes.unavailable_sensors || []);
+        if (open.length || dead.length) {
+          const parts = [];
+          if (open.length) parts.push(`open: ${open.map((e) => this._name(e)).join(", ")}`);
+          if (dead.length) parts.push(`offline: ${dead.map((e) => this._name(e)).join(", ")}`);
+          this._toast(`Cannot arm — ${parts.join(" / ")}`, false);
           return;
         }
         this._hass.callService("alarm_control_panel", "alarm_arm_away", { entity_id: alarm.entity_id });
@@ -763,11 +779,26 @@
       const a = alarm.attributes;
       const secCount = (a.doors || []).length + (a.vibration || []).length;
       const open = a.open_sensors || [];
+      const dead = a.unavailable_sensors || [];
+      const blocked = alarm.state === "disarmed" && (open.length > 0 || dead.length > 0);
+
+      // Pre-arm readiness: list every blocker and disable the arm button.
+      const readyBox = this.$("#ready-box");
+      readyBox.hidden = !blocked;
+      if (blocked) {
+        readyBox.innerHTML =
+          open.map((e) => `
+            <span class="ready-chip"><ha-icon icon="mdi:door-open"></ha-icon>${this._name(e)} — OPEN</span>`).join("") +
+          dead.map((e) => `
+            <span class="ready-chip"><ha-icon icon="mdi:lan-disconnect"></ha-icon>${this._name(e)} — OFFLINE</span>`).join("");
+      }
+      this.$("#main-btn").disabled = blocked;
+
       let sub = "";
       if (alarm.state === "disarmed") {
-        sub = open.length
-          ? `Open now: ${open.map((e) => this._name(e)).join(", ")}`
-          : `Ready — ${secCount} sensor${secCount === 1 ? "" : "s"} closed`;
+        sub = blocked
+          ? "Not ready to arm — fix the sensors below first"
+          : `Ready to arm — ${secCount} sensor${secCount === 1 ? "" : "s"} OK`;
         if (a.schedules_enabled) sub += " · schedule on";
       } else if (alarm.state === "armed_away") {
         sub = `Monitoring ${secCount} sensor${secCount === 1 ? "" : "s"}`;

@@ -207,15 +207,25 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._log("water", f"Water leak detected by {names}")
         self.async_write_ha_state()
 
+    # ------------------------------------------------------------- readiness
+
+    def _blocking_sensors(self) -> tuple[list[str], list[str]]:
+        """Return (open, dead) security sensors that prevent arming."""
+        open_sensors: list[str] = []
+        dead_sensors: list[str] = []
+        for entity_id in self._doors + self._vibration:
+            state = self.hass.states.get(entity_id)
+            if state is None or state.state in ("unavailable", "unknown"):
+                dead_sensors.append(entity_id)
+            elif state.state == STATE_ON:
+                open_sensors.append(entity_id)
+        return open_sensors, dead_sensors
+
     # ------------------------------------------------------------- attributes
 
     @property
     def extra_state_attributes(self):
-        open_sensors = [
-            e
-            for e in self._doors + self._vibration
-            if (s := self.hass.states.get(e)) and s.state == STATE_ON
-        ]
+        open_sensors, dead_sensors = self._blocking_sensors()
         return {
             "doors": self._doors,
             "vibration": self._vibration,
@@ -242,6 +252,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             "schedules_enabled": self._schedules_enabled,
             "schedules": self._schedules,
             "open_sensors": open_sensors,
+            "unavailable_sensors": dead_sensors,
             "delay_ends_at": self._delay_ends_at.isoformat() if self._delay_ends_at else None,
             "delay_total": self._delay_total,
             "last_triggered_by": self._last_triggered_by,
@@ -352,20 +363,27 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         ):
             return
 
-        open_sensors = [
-            e
-            for e in self._doors + self._vibration
-            if (s := self.hass.states.get(e)) and s.state == STATE_ON
-        ]
-        if open_sensors:
-            names = ", ".join(friendly_name(self.hass, e) for e in open_sensors)
-            _LOGGER.warning("Cannot arm, sensors open: %s", names)
-            self._log("alert", f"Arming failed - open: {names}")
+        open_sensors, dead_sensors = self._blocking_sensors()
+        if open_sensors or dead_sensors:
+            parts = []
+            if open_sensors:
+                parts.append(
+                    "open: "
+                    + ", ".join(friendly_name(self.hass, e) for e in open_sensors)
+                )
+            if dead_sensors:
+                parts.append(
+                    "offline: "
+                    + ", ".join(friendly_name(self.hass, e) for e in dead_sensors)
+                )
+            reason = " / ".join(parts)
+            _LOGGER.warning("Cannot arm - %s", reason)
+            self._log("alert", f"Arming refused - {reason}")
             await async_notify_all(
                 self.hass,
                 self._notify_services,
                 "Security",
-                f"Cannot arm - open: {names}",
+                f"Cannot arm - {reason}",
             )
             self.async_write_ha_state()
             return
