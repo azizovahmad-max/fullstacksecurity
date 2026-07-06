@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v17.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v18.js")
         
         js_content = """class FullStackSecurityCardV16 extends HTMLElement {
   set panel(panel) {
@@ -316,6 +316,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                   <option value="doors">Door Sensor</option>
                   <option value="vibration">Vibration Sensor</option>
                   <option value="sirens">Siren/Alarm</option>
+                  <option value="lights">Light Bulb</option>
                 </select>
               </div>
               
@@ -408,6 +409,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     const doors = attrs.doors || [];
     const vibrations = attrs.vibration || [];
     const sirens = attrs.sirens || [];
+    const lights = attrs.lights || [];
 
     let sensorsHtml = '';
     
@@ -421,6 +423,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             let stateClass = '';
             let stateText = '';
             
+            let customStyle = '';
             if (type === 'door') {
                 const isSafe = (state === 'off' || state === 'closed');
                 stateClass = isSafe ? 'safe' : 'alert';
@@ -433,6 +436,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 const isOn = (state === 'on');
                 stateClass = isOn ? 'alert' : 'safe';
                 stateText = isOn ? 'SOUNDING' : 'OFF';
+            } else if (type === 'light') {
+                const isOn = (state === 'on');
+                stateClass = isOn ? 'safe' : 'neutral';
+                stateText = isOn ? 'ON' : 'POWERED OFF';
+                if (isOn && sensorObj.attributes.rgb_color) {
+                    const rgb = sensorObj.attributes.rgb_color;
+                    customStyle = `style="color: rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})"`;
+                }
             }
             
             if (state === 'unavailable') {
@@ -443,9 +454,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             html += `
               <div class="sensor-item">
                 <span class="sensor-name">${name}</span>
-                <span class="sensor-state ${stateClass}">
+                <span class="sensor-state ${stateClass}" ${customStyle}>
                   ${stateText}
-                  <button class="remove-btn" onclick="this.getRootNode().host.removeSensor('${sensorId}', '${type === 'door' ? 'doors' : (type === 'vibration' ? 'vibration' : 'sirens')}')">X</button>
+                  <button class="remove-btn" onclick="this.getRootNode().host.removeSensor('${sensorId}', '${type === 'door' ? 'doors' : (type === 'vibration' ? 'vibration' : (type === 'light' ? 'lights' : 'sirens'))}')">X</button>
                 </span>
               </div>
             `;
@@ -456,6 +467,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     sensorsHtml += renderGroup('Doors', doors, 'door');
     sensorsHtml += renderGroup('Vibration Sensors', vibrations, 'vibration');
     sensorsHtml += renderGroup('Sirens & Alarms', sirens, 'siren');
+    sensorsHtml += renderGroup('Lights', lights, 'light');
 
     if (sensorsHtml === '') {
       this.sensorsList.innerHTML = `<div class="sensor-item"><span class="sensor-name" style="color:#64748b; font-style:italic;">No sensors connected. Click Configure to add them.</span></div>`;
@@ -476,13 +488,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     const type = this.typeSelect.value;
     let options = '<option value="">Select a device...</option>';
     
+    const existingEntities = [
+        ...(this._hass.states[this._entityId]?.attributes?.doors || []),
+        ...(this._hass.states[this._entityId]?.attributes?.vibration || []),
+        ...(this._hass.states[this._entityId]?.attributes?.sirens || []),
+        ...(this._hass.states[this._entityId]?.attributes?.lights || [])
+    ];
+    
     const entities = Object.keys(this._hass.states).filter(k => {
+        if (existingEntities.includes(k)) return false;
         const obj = this._hass.states[k];
         const domain = k.split('.')[0];
         const deviceClass = obj.attributes.device_class || '';
         const nameId = (k + (obj.attributes.friendly_name || '')).toLowerCase();
         
-        if (type === 'sirens') {
+        if (type === 'lights') {
+            return domain === 'light' || domain === 'switch';
+        } else if (type === 'sirens') {
             return domain === 'siren' || domain === 'switch';
         } else if (type === 'vibration') {
             return domain === 'binary_sensor' && (deviceClass === 'vibration' || nameId.includes('vibration'));
@@ -576,7 +598,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v17.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v18.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },

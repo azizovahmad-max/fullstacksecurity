@@ -94,6 +94,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
             "doors": self._doors,
             "vibration": self._vibrations,
             "sirens": self._sirens,
+            "lights": self._lights,
             "buttons": self._buttons,
         }
 

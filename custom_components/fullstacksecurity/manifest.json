@@ -1,7 +1,7 @@
 {
   "domain": "fullstacksecurity",
   "name": "FullStack Security",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "documentation": "https://github.com/your-username/fullstacksecurity",
   "dependencies": [],
   "codeowners": [],
