@@ -17,11 +17,14 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
+    async_track_time_change,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_ARMED_LIGHT_COLOR,
+    CONF_ARMED_LIGHTS,
     CONF_ARMING_DELAY,
     CONF_BUTTON_DOUBLE,
     CONF_BUTTON_HOLD,
@@ -35,12 +38,18 @@ from .const import (
     CONF_LIGHT_DURATION,
     CONF_LIGHT_MODE,
     CONF_LIGHTS,
+    CONF_NOTIFY_ARM_DISARM,
+    CONF_SCHEDULES,
+    CONF_SCHEDULES_ENABLED,
     CONF_SIREN_DURATION,
     CONF_SIREN_TONE,
+    CONF_SIREN_VOLUME,
     CONF_SIRENS,
     CONF_VIBRATION,
     DOMAIN,
+    EVENT_FLOOD,
     EVENT_TRIGGERED,
+    WEEKDAYS,
     get_notify_services,
     opt,
 )
@@ -52,6 +61,8 @@ RESTORABLE_STATES = {
     AlarmControlPanelState.ARMED_AWAY,
     AlarmControlPanelState.TRIGGERED,
 }
+
+MAX_HISTORY = 25
 
 
 async def async_setup_entry(
@@ -77,6 +88,15 @@ def _classify_button_press(raw: str) -> str | None:
     return None
 
 
+def _hex_to_rgb(color: str) -> list[int]:
+    """Convert #rrggbb to [r, g, b]; falls back to red."""
+    try:
+        c = color.lstrip("#")
+        return [int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)]
+    except (ValueError, IndexError):
+        return [255, 0, 0]
+
+
 class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
     """The armed/disarmed brain of the security system."""
 
@@ -99,27 +119,35 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._flood: list[str] = list(opt(options, CONF_FLOOD))
         self._sirens: list[str] = list(opt(options, CONF_SIRENS))
         self._lights: list[str] = list(opt(options, CONF_LIGHTS))
+        self._armed_lights: list[str] = list(opt(options, CONF_ARMED_LIGHTS))
         self._buttons: list[str] = list(opt(options, CONF_BUTTONS))
 
         self._arming_delay = int(opt(options, CONF_ARMING_DELAY))
         self._entry_delay = int(opt(options, CONF_ENTRY_DELAY))
         self._siren_duration = int(opt(options, CONF_SIREN_DURATION))
         self._siren_tone = str(opt(options, CONF_SIREN_TONE))
+        self._siren_volume = int(opt(options, CONF_SIREN_VOLUME))
         self._light_mode = str(opt(options, CONF_LIGHT_MODE))
         self._light_duration = int(opt(options, CONF_LIGHT_DURATION))
+        self._armed_light_color = str(opt(options, CONF_ARMED_LIGHT_COLOR))
         self._flood_siren = bool(opt(options, CONF_FLOOD_SIREN))
         self._notify_services = get_notify_services(options)
+        self._notify_arm_disarm = bool(opt(options, CONF_NOTIFY_ARM_DISARM))
         self._button_actions = {
             "single": opt(options, CONF_BUTTON_SINGLE),
             "double": opt(options, CONF_BUTTON_DOUBLE),
             "triple": opt(options, CONF_BUTTON_TRIPLE),
             "hold": opt(options, CONF_BUTTON_HOLD),
         }
+        self._schedules_enabled = bool(opt(options, CONF_SCHEDULES_ENABLED))
+        schedules = opt(options, CONF_SCHEDULES)
+        self._schedules: dict = schedules if isinstance(schedules, dict) else {}
 
         self._delay_ends_at = None
         self._delay_total = 0
         self._last_triggered_by: str | None = None
         self._timer_cancel = None
+        self._history: list[dict] = []
 
     # ------------------------------------------------------------------ setup
 
@@ -127,15 +155,32 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         await super().async_added_to_hass()
 
         last = await self.async_get_last_state()
-        if last and last.state in [s.value for s in RESTORABLE_STATES]:
-            self._attr_alarm_state = AlarmControlPanelState(last.state)
-            _LOGGER.info("Restored alarm state: %s", last.state)
+        if last:
+            hist = last.attributes.get("history")
+            if isinstance(hist, list):
+                self._history = hist[-MAX_HISTORY:]
+            if last.state in [s.value for s in RESTORABLE_STATES]:
+                self._attr_alarm_state = AlarmControlPanelState(last.state)
+                _LOGGER.info("Restored alarm state: %s", last.state)
+                if last.state == AlarmControlPanelState.ARMED_AWAY.value:
+                    # Re-apply the armed indicator lights after a restart.
+                    self.hass.async_create_task(self._async_armed_lights_on())
 
         watched = self._doors + self._vibration + self._buttons
         if watched:
             self.async_on_remove(
                 async_track_state_change_event(self.hass, watched, self._watched_changed)
             )
+
+        # Log flood events from the flood monitor into the activity history.
+        self.async_on_remove(
+            self.hass.bus.async_listen(EVENT_FLOOD, self._flood_event)
+        )
+
+        # Minute tick for the auto-arm schedule.
+        self.async_on_remove(
+            async_track_time_change(self.hass, self._schedule_tick, second=0)
+        )
 
     async def async_will_remove_from_hass(self) -> None:
         self._cancel_timer()
@@ -146,6 +191,21 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             self._timer_cancel = None
         self._delay_ends_at = None
         self._delay_total = 0
+
+    # ---------------------------------------------------------------- history
+
+    @callback
+    def _log(self, icon: str, text: str) -> None:
+        self._history.append(
+            {"t": dt_util.utcnow().isoformat(), "i": icon, "m": text}
+        )
+        self._history = self._history[-MAX_HISTORY:]
+
+    @callback
+    def _flood_event(self, event) -> None:
+        names = event.data.get("names", "flood sensor")
+        self._log("water", f"Water leak detected by {names}")
+        self.async_write_ha_state()
 
     # ------------------------------------------------------------- attributes
 
@@ -162,23 +222,30 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             "flood": self._flood,
             "sirens": self._sirens,
             "lights": self._lights,
+            "armed_lights": self._armed_lights,
             "buttons": self._buttons,
             "arming_delay": self._arming_delay,
             "entry_delay": self._entry_delay,
             "siren_duration": self._siren_duration,
             "siren_tone": self._siren_tone,
+            "siren_volume": self._siren_volume,
             "light_mode": self._light_mode,
             "light_duration": self._light_duration,
+            "armed_light_color": self._armed_light_color,
             "flood_siren": self._flood_siren,
             "notify_services": self._notify_services,
+            "notify_arm_disarm": self._notify_arm_disarm,
             "button_single": self._button_actions["single"],
             "button_double": self._button_actions["double"],
             "button_triple": self._button_actions["triple"],
             "button_hold": self._button_actions["hold"],
+            "schedules_enabled": self._schedules_enabled,
+            "schedules": self._schedules,
             "open_sensors": open_sensors,
             "delay_ends_at": self._delay_ends_at.isoformat() if self._delay_ends_at else None,
             "delay_total": self._delay_total,
             "last_triggered_by": self._last_triggered_by,
+            "history": self._history,
         }
 
     # ----------------------------------------------------------- sensor logic
@@ -234,9 +301,51 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         elif action == "disarm":
             self.hass.async_create_task(self.async_alarm_disarm())
 
+    # --------------------------------------------------------------- schedule
+
+    @callback
+    def _schedule_tick(self, now) -> None:
+        """Check the weekly schedule once a minute (local time)."""
+        if not self._schedules_enabled or not self._schedules:
+            return
+        local = dt_util.as_local(now)
+        hhmm = local.strftime("%H:%M")
+        today = WEEKDAYS[local.weekday()]
+        yesterday = WEEKDAYS[(local.weekday() - 1) % 7]
+
+        def row(day):
+            r = self._schedules.get(day)
+            return r if isinstance(r, dict) and r.get("enabled") else None
+
+        t = row(today)
+        y = row(yesterday)
+
+        # Arm at today's arm time.
+        if t and t.get("arm") == hhmm:
+            if self._attr_alarm_state == AlarmControlPanelState.DISARMED:
+                self._log("clock", "Auto-armed by schedule")
+                self.hass.async_create_task(self.async_alarm_arm_away(auto=True))
+            return
+
+        # Disarm: same-day window (disarm > arm) fires today; overnight window
+        # (disarm <= arm) fires the next day.
+        disarm_now = False
+        if t and t.get("disarm") == hhmm and t.get("disarm", "") > t.get("arm", ""):
+            disarm_now = True
+        if y and y.get("disarm") == hhmm and y.get("disarm", "") <= y.get("arm", ""):
+            disarm_now = True
+
+        if disarm_now and self._attr_alarm_state in (
+            AlarmControlPanelState.ARMED_AWAY,
+            AlarmControlPanelState.ARMING,
+            AlarmControlPanelState.PENDING,
+        ):
+            self._log("clock", "Auto-disarmed by schedule")
+            self.hass.async_create_task(self.async_alarm_disarm(auto=True))
+
     # ------------------------------------------------------------ arm/disarm
 
-    async def async_alarm_arm_away(self, code=None) -> None:
+    async def async_alarm_arm_away(self, code=None, auto: bool = False) -> None:
         if self._attr_alarm_state not in (
             AlarmControlPanelState.DISARMED,
             AlarmControlPanelState.ARMING,
@@ -251,6 +360,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         if open_sensors:
             names = ", ".join(friendly_name(self.hass, e) for e in open_sensors)
             _LOGGER.warning("Cannot arm, sensors open: %s", names)
+            self._log("alert", f"Arming failed - open: {names}")
             await async_notify_all(
                 self.hass,
                 self._notify_services,
@@ -260,8 +370,8 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             self.async_write_ha_state()
             return
 
-        if self._arming_delay <= 0:
-            self._set_armed()
+        if self._arming_delay <= 0 or auto:
+            await self._async_set_armed(auto=auto)
             return
 
         self._cancel_timer()
@@ -273,22 +383,49 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         @callback
         def _finish_arming(_now) -> None:
             self._timer_cancel = None
-            self._set_armed()
+            self.hass.async_create_task(self._async_set_armed())
 
         self._timer_cancel = async_call_later(self.hass, self._arming_delay, _finish_arming)
 
-    @callback
-    def _set_armed(self) -> None:
+    async def _async_set_armed(self, auto: bool = False) -> None:
         self._cancel_timer()
         self._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY
+        self._log("shield", "Armed by schedule" if auto else "System armed")
         self.async_write_ha_state()
         _LOGGER.info("FullStack Security armed (away)")
 
-    async def async_alarm_disarm(self, code=None) -> None:
+        await self._async_armed_lights_on()
+        if self._notify_arm_disarm:
+            await async_notify_all(
+                self.hass, self._notify_services, "Security", "System armed"
+            )
+
+    async def _async_armed_lights_on(self) -> None:
+        if not self._armed_lights:
+            return
+        try:
+            await self.hass.services.async_call(
+                "light",
+                "turn_on",
+                {
+                    ATTR_ENTITY_ID: self._armed_lights,
+                    "rgb_color": _hex_to_rgb(self._armed_light_color),
+                },
+                blocking=False,
+            )
+        except Exception as err:  # noqa: BLE001 - color support varies per bulb
+            _LOGGER.warning("Armed light color failed (%s), plain turn_on", err)
+            await self.hass.services.async_call(
+                "light", "turn_on", {ATTR_ENTITY_ID: self._armed_lights}, blocking=False
+            )
+
+    async def async_alarm_disarm(self, code=None, auto: bool = False) -> None:
         was = self._attr_alarm_state
         self._cancel_timer()
         self._attr_alarm_state = AlarmControlPanelState.DISARMED
         self._last_triggered_by = None
+        if was != AlarmControlPanelState.DISARMED:
+            self._log("shield-off", "Disarmed by schedule" if auto else "System disarmed")
         self.async_write_ha_state()
         _LOGGER.info("FullStack Security disarmed")
 
@@ -301,6 +438,17 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
                     {ATTR_ENTITY_ID: self._lights},
                     blocking=False,
                 )
+        if was != AlarmControlPanelState.DISARMED and self._armed_lights:
+            await self.hass.services.async_call(
+                "homeassistant",
+                "turn_off",
+                {ATTR_ENTITY_ID: self._armed_lights},
+                blocking=False,
+            )
+        if was != AlarmControlPanelState.DISARMED and self._notify_arm_disarm:
+            await async_notify_all(
+                self.hass, self._notify_services, "Security", "System disarmed"
+            )
 
     async def async_alarm_trigger(self, code=None) -> None:
         await self._async_trigger("manual")
@@ -333,17 +481,21 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._cancel_timer()
         self._attr_alarm_state = AlarmControlPanelState.TRIGGERED
         self._last_triggered_by = source_entity
-        self.async_write_ha_state()
 
         name = (
             "manual trigger"
             if source_entity == "manual"
             else friendly_name(self.hass, source_entity)
         )
+        self._log("alarm", f"ALARM triggered by {name}")
+        self.async_write_ha_state()
         _LOGGER.warning("ALARM TRIGGERED by %s", name)
         self.hass.bus.async_fire(EVENT_TRIGGERED, {"source": source_entity, "name": name})
 
-        await async_sirens_on(self.hass, self._sirens, self._siren_tone, self._siren_duration)
+        await async_sirens_on(
+            self.hass, self._sirens, self._siren_tone, self._siren_duration,
+            self._siren_volume,
+        )
 
         if self._siren_duration > 0 and self._sirens:
 

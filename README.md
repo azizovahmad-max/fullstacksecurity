@@ -17,11 +17,19 @@ automations to write.
 - 🔘 **Wireless buttons** arm/disarm the system (single / double / triple /
   hold actions, each mappable). Works with both `event` entities and the
   legacy zigbee2mqtt `*_action` sensors
-- 📢 **Sirens** with tone + duration selection (real `siren` entities and
-  switch-based sirens both supported)
+- 📢 **Sirens** with preset sound/tone, duration and volume (real `siren`
+  entities and switch-based sirens both supported)
 - 💡 **Lights** flash or turn solid red/white when the alarm triggers
+- 🔴 **Armed indicator lights** — chosen bulbs hold any color you pick
+  (default red) the whole time the system is armed, and turn off on disarm
+- 📅 **Auto-arm schedule** — a routine per weekday (e.g. arm 22:30, disarm
+  06:30 next morning); overnight windows are handled automatically
+- ❤️ **Health page** — battery level, signal (LQI) and online/offline status
+  for every sensor, button, siren and bulb, problems sorted first
+- 📜 **Activity log** on the dashboard: arms, disarms, triggers, water leaks
+  and schedule actions with timestamps (survives restarts)
 - 📱 **Phone notifications** via the Home Assistant companion app on trigger,
-  water leak, and failed arming
+  water leak, and failed arming (optionally on every arm/disarm too)
 - 🖥️ **Sidebar panel** with live sensor states, arm/disarm countdowns, device
   management and all settings — themed to match your HA light/dark theme
 - 🔁 Alarm state survives Home Assistant restarts
@@ -58,9 +66,12 @@ Copy `custom_components/fullstacksecurity` into your Home Assistant
 2. A **Security** item appears in the sidebar
 3. Open it → **Devices** tab → add your door sensors, vibration sensors,
    flood sensors, sirens, lights and buttons from the dropdowns
-4. **Settings** tab → set delays, siren tone/duration, button actions and
-   tick the phones that should get notifications → **Save settings**
-5. Arm from the **Dashboard** tab or with your zigbee button
+4. **Settings** tab → set delays, siren tone/volume/duration, light actions,
+   armed indicator color, button actions and tick the phones that should get
+   notifications → **Save settings**
+5. **Schedule** tab → optionally set auto-arm/disarm times per weekday
+6. Arm from the **Dashboard** tab or with your zigbee button, and keep an eye
+   on batteries in the **Health** tab
 
 ## How it behaves
 

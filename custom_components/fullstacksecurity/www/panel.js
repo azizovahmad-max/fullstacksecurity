@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel (v2.0.0) */
+/* FullStack Security - sidebar panel (v2.1.0) */
 (() => {
   if (customElements.get("fullstacksecurity-panel")) return;
 
@@ -7,7 +7,8 @@
     vibration: { title: "Vibration sensors", icon: "mdi:vibrate" },
     flood: { title: "Flood / water leak sensors", icon: "mdi:water-alert" },
     sirens: { title: "Sirens", icon: "mdi:bullhorn" },
-    lights: { title: "Alarm lights", icon: "mdi:lightbulb-on" },
+    lights: { title: "Alarm lights (flash on trigger)", icon: "mdi:lightbulb-on" },
+    armed_lights: { title: "Armed indicator lights (stay colored while armed)", icon: "mdi:lightbulb-group" },
     buttons: { title: "Buttons / remotes", icon: "mdi:gesture-double-tap" },
   };
 
@@ -18,6 +19,17 @@
     pending: { label: "ENTRY DELAY", icon: "mdi:shield-alert-outline", cls: "st-pending", btn: "DISARM" },
     triggered: { label: "ALARM!", icon: "mdi:alarm-light", cls: "st-triggered", btn: "DISARM" },
   };
+
+  const HISTORY_ICONS = {
+    shield: "mdi:shield-check", "shield-off": "mdi:shield-off-outline",
+    alarm: "mdi:alarm-light", water: "mdi:water-alert",
+    clock: "mdi:clock-outline", alert: "mdi:alert",
+  };
+
+  const DAYS = [
+    ["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"],
+    ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"],
+  ];
 
   const SETTINGS_FIELDS = [
     "arming_delay", "entry_delay", "siren_duration", "siren_tone",
@@ -31,6 +43,7 @@
       this.attachShadow({ mode: "open" });
       this._tab = "dashboard";
       this._dirty = false;
+      this._schDirty = false;
       this._configSig = "";
       this._countdownTimer = null;
     }
@@ -106,6 +119,7 @@
             ok = domain === "siren" || domain === "switch";
             break;
           case "lights":
+          case "armed_lights":
             ok = domain === "light";
             break;
           case "buttons":
@@ -138,7 +152,8 @@
         case "vibration": return on ? { text: "VIBRATION", cls: "alert" } : { text: "CLEAR", cls: "safe" };
         case "flood": return on ? { text: "WET", cls: "water" } : { text: "DRY", cls: "safe" };
         case "sirens": return on ? { text: "SOUNDING", cls: "alert" } : { text: "IDLE", cls: "idle" };
-        case "lights": return on ? { text: "ON", cls: "warn" } : { text: "OFF", cls: "idle" };
+        case "lights":
+        case "armed_lights": return on ? { text: "ON", cls: "warn" } : { text: "OFF", cls: "idle" };
         case "buttons": {
           if (s.entity_id.startsWith("event.")) {
             const t = s.attributes.event_type;
@@ -148,6 +163,40 @@
         }
       }
       return { text: s.state.toUpperCase(), cls: "idle" };
+    }
+
+    _batteryFor(entityId) {
+      const s = this._hass.states[entityId];
+      if (!s) return null;
+      const a = s.attributes;
+      if (typeof a.battery === "number") return a.battery;
+      if (typeof a.battery_level === "number") return a.battery_level;
+      const obj = entityId.split(".")[1] || "";
+      const bases = new Set([
+        obj,
+        obj.replace(/_(contact|action|vibration|occupancy|water_leak|moisture|state|opening|button)$/, ""),
+      ]);
+      for (const b of bases) {
+        const c = this._hass.states[`sensor.${b}_battery`];
+        if (c && !isNaN(parseFloat(c.state))) return parseFloat(c.state);
+      }
+      return null;
+    }
+
+    _lqiFor(entityId) {
+      const s = this._hass.states[entityId];
+      if (!s) return null;
+      if (typeof s.attributes.linkquality === "number") return s.attributes.linkquality;
+      const obj = entityId.split(".")[1] || "";
+      const bases = new Set([
+        obj,
+        obj.replace(/_(contact|action|vibration|occupancy|water_leak|moisture|state|opening|button)$/, ""),
+      ]);
+      for (const b of bases) {
+        const c = this._hass.states[`sensor.${b}_linkquality`];
+        if (c && !isNaN(parseFloat(c.state))) return parseFloat(c.state);
+      }
+      return null;
     }
 
     _toast(msg, ok = true) {
@@ -197,12 +246,13 @@
           padding: 8px; border-radius: 50%; display: flex;
         }
         #menu-btn:hover { background: rgba(255,255,255,.12); }
-        .tabs { display: flex; padding: 0 8px; }
+        .tabs { display: flex; padding: 0 8px; overflow-x: auto; scrollbar-width: none; }
+        .tabs::-webkit-scrollbar { display: none; }
         .tabs button {
-          background: none; border: none; color: inherit; opacity: .75;
+          background: none; border: none; color: inherit; opacity: .75; flex: none;
           font: inherit; font-size: 14px; font-weight: 500; text-transform: uppercase;
-          letter-spacing: .5px; padding: 12px 18px; cursor: pointer;
-          border-bottom: 3px solid transparent;
+          letter-spacing: .5px; padding: 12px 16px; cursor: pointer;
+          border-bottom: 3px solid transparent; white-space: nowrap;
         }
         .tabs button.active { opacity: 1; border-bottom-color: var(--app-header-text-color, #fff); }
         main { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }
@@ -237,6 +287,7 @@
         }
         #hero-sub { color: var(--secondary-text-color); font-size: 14px; min-height: 20px; }
         #countdown { margin: 18px auto 0; max-width: 340px; }
+        #countdown[hidden] { display: none; }
         #countdown-text { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
         .bar { height: 6px; border-radius: 3px; background: var(--fss-border); overflow: hidden; }
         #bar-fill { height: 100%; width: 0%; background: var(--st-color, var(--fss-amber)); transition: width .25s linear; }
@@ -284,6 +335,7 @@
         .pill.warn { color: var(--fss-amber); background: color-mix(in srgb, var(--fss-amber) 16%, transparent); }
         .pill.water { color: var(--fss-blue); background: color-mix(in srgb, var(--fss-blue) 14%, transparent); animation: blink 1.5s infinite; }
         .pill.idle { color: var(--secondary-text-color); background: color-mix(in srgb, var(--secondary-text-color) 12%, transparent); }
+        .pill.static { animation: none; }
         .rm {
           background: none; border: none; cursor: pointer; flex: none;
           color: var(--secondary-text-color); padding: 6px; border-radius: 50%;
@@ -293,9 +345,16 @@
         .rm ha-icon { --mdc-icon-size: 18px; color: inherit; }
         .empty { padding: 14px 4px; font-size: 13px; color: var(--secondary-text-color); font-style: italic; }
 
+        /* history */
+        .hist-row { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--fss-border); font-size: 13px; }
+        .hist-row:last-child { border-bottom: none; }
+        .hist-row ha-icon { --mdc-icon-size: 18px; color: var(--secondary-text-color); flex: none; }
+        .hist-row .when { color: var(--secondary-text-color); font-size: 12px; flex: none; width: 118px; }
+        .hist-row .what { flex: 1; }
+
         /* add row + forms */
         .addrow { display: flex; gap: 10px; margin-top: 14px; }
-        select, input[type=number], input[type=text] {
+        select, input[type=number], input[type=text], input[type=time] {
           width: 100%; padding: 10px 12px; font: inherit; font-size: 14px;
           color: var(--primary-text-color);
           background: var(--secondary-background-color, rgba(127,127,127,.08));
@@ -314,13 +373,48 @@
         .field label { display: block; font-size: 12px; font-weight: 600; color: var(--secondary-text-color); margin-bottom: 6px; }
         .checkline { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 14px; cursor: pointer; }
         .checkline input { width: auto; accent-color: var(--primary-color); }
-        #save-btn {
+        input[type=range] { width: 100%; accent-color: var(--primary-color); padding: 0; background: none; border: none; }
+        input[type=color] {
+          width: 64px; height: 38px; padding: 2px; border: 1px solid var(--fss-border);
+          border-radius: 8px; background: var(--secondary-background-color, rgba(127,127,127,.08)); cursor: pointer;
+        }
+        .colorline { display: flex; align-items: center; gap: 14px; }
+        .save-btn {
           position: sticky; bottom: 16px; width: 100%;
           padding: 16px; font-size: 15px; font-weight: 700; letter-spacing: 1px;
           border: none; border-radius: 12px; cursor: pointer; color: #fff;
           background: var(--fss-green); box-shadow: 0 4px 14px rgba(0,0,0,.25);
         }
-        #save-btn:hover { filter: brightness(1.1); }
+        .save-btn:hover { filter: brightness(1.1); }
+
+        /* schedule */
+        .sch-row {
+          display: grid; grid-template-columns: 34px 96px 1fr 1fr; gap: 10px;
+          align-items: center; padding: 8px 0; border-bottom: 1px solid var(--fss-border);
+        }
+        .sch-row:last-child { border-bottom: none; }
+        .sch-row .day { font-size: 14px; font-weight: 600; }
+        .sch-row input[type=checkbox] { width: auto; accent-color: var(--primary-color); justify-self: start; }
+        .sch-row.off .day, .sch-row.off input[type=time] { opacity: .4; }
+        .sch-head { display: grid; grid-template-columns: 34px 96px 1fr 1fr; gap: 10px; padding: 4px 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--secondary-text-color); }
+        @media (max-width: 480px) {
+          .sch-row, .sch-head { grid-template-columns: 28px 44px 1fr 1fr; }
+          .sch-row .day { font-size: 12px; }
+        }
+
+        /* health */
+        .health-summary { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+        .chip {
+          display: inline-flex; align-items: center; gap: 8px;
+          padding: 8px 14px; border-radius: 99px; font-size: 13px; font-weight: 600;
+          background: color-mix(in srgb, var(--secondary-text-color) 10%, transparent);
+        }
+        .chip ha-icon { --mdc-icon-size: 16px; }
+        .chip.good { color: var(--fss-green); background: color-mix(in srgb, var(--fss-green) 12%, transparent); }
+        .chip.bad { color: var(--fss-red); background: color-mix(in srgb, var(--fss-red) 12%, transparent); }
+        .chip.warn { color: var(--fss-amber); background: color-mix(in srgb, var(--fss-amber) 14%, transparent); }
+        .h-meta { display: flex; gap: 8px; align-items: center; flex: none; }
+        .lqi { font-size: 11px; color: var(--secondary-text-color); width: 64px; text-align: right; }
 
         #toast {
           position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
@@ -341,6 +435,8 @@
         <div class="tabs">
           <button data-tab="dashboard" class="active">Dashboard</button>
           <button data-tab="devices">Devices</button>
+          <button data-tab="schedule">Schedule</button>
+          <button data-tab="health">Health</button>
           <button data-tab="settings">Settings</button>
         </div>
       </header>
@@ -369,6 +465,10 @@
             <h2><ha-icon icon="mdi:motion-sensor"></ha-icon> Live sensors</h2>
             <div id="sensor-grid"></div>
           </section>
+          <section class="card">
+            <h2><ha-icon icon="mdi:history"></ha-icon> Recent activity</h2>
+            <div id="history-list"></div>
+          </section>
         </div>
 
         <div class="view" id="view-devices">
@@ -383,6 +483,40 @@
             </section>`).join("")}
         </div>
 
+        <div class="view" id="view-schedule">
+          <section class="card">
+            <h2><ha-icon icon="mdi:calendar-clock"></ha-icon> Auto-arm schedule</h2>
+            <p class="hint">
+              The system arms and disarms itself at these times on enabled days.
+              If the disarm time is earlier than the arm time, it disarms the
+              next morning (e.g. arm 22:30 &rarr; disarm 06:30).
+            </p>
+            <label class="checkline" style="margin-bottom:10px;">
+              <input type="checkbox" id="sch-enabled"> Enable automatic arming schedule
+            </label>
+            <div class="sch-head"><span></span><span>Day</span><span>Arm at</span><span>Disarm at</span></div>
+            ${DAYS.map(([key, label]) => `
+              <div class="sch-row" data-day="${key}">
+                <input type="checkbox" class="sch-en" data-day="${key}">
+                <span class="day">${label}</span>
+                <input type="time" class="sch-arm" data-day="${key}" value="22:00">
+                <input type="time" class="sch-disarm" data-day="${key}" value="07:00">
+              </div>`).join("")}
+          </section>
+          <button id="save-schedule-btn" class="save-btn">SAVE SCHEDULE</button>
+        </div>
+
+        <div class="view" id="view-health">
+          <section class="card">
+            <h2><ha-icon icon="mdi:heart-pulse"></ha-icon> Device health</h2>
+            <p class="hint">Battery and signal come from zigbee2mqtt. Replace batteries below 20%.</p>
+            <div class="health-summary" id="health-summary"></div>
+          </section>
+          <section class="card">
+            <div id="health-list"></div>
+          </section>
+        </div>
+
         <div class="view" id="view-settings">
           <section class="card">
             <h2><ha-icon icon="mdi:timer-outline"></ha-icon> Timing</h2>
@@ -394,11 +528,22 @@
           </section>
 
           <section class="card">
-            <h2><ha-icon icon="mdi:bullhorn"></ha-icon> Alarm response</h2>
+            <h2><ha-icon icon="mdi:bullhorn"></ha-icon> Siren</h2>
             <div class="grid2">
-              <div class="field"><label>Siren tone</label><select id="f-siren_tone"><option value="">Default</option></select></div>
-              <div class="field"><label>Siren duration (seconds, 0 = until disarmed)</label><input type="number" min="0" id="f-siren_duration"></div>
-              <div class="field"><label>Light action</label>
+              <div class="field"><label>Preset sound / tone</label><select id="f-siren_tone"><option value="">Default</option></select></div>
+              <div class="field"><label>Duration (seconds, 0 = until disarmed)</label><input type="number" min="0" id="f-siren_duration"></div>
+            </div>
+            <div class="field" style="margin-top:14px;">
+              <label>Volume: <span id="volume-label">100%</span></label>
+              <input type="range" min="0" max="100" step="5" id="f-siren_volume">
+            </div>
+          </section>
+
+          <section class="card">
+            <h2><ha-icon icon="mdi:lightbulb-on"></ha-icon> Lights</h2>
+            <p class="hint">"Alarm lights" act when the alarm triggers. "Armed indicator lights" hold the chosen color the whole time the system is armed.</p>
+            <div class="grid2">
+              <div class="field"><label>Alarm light action (on trigger)</label>
                 <select id="f-light_mode">
                   <option value="flash_long">Flash (long)</option>
                   <option value="flash_short">Flash (short)</option>
@@ -406,7 +551,14 @@
                   <option value="solid_white">Solid white</option>
                 </select>
               </div>
-              <div class="field"><label>Light duration (seconds, 0 = until disarmed)</label><input type="number" min="0" id="f-light_duration"></div>
+              <div class="field"><label>Alarm light duration (seconds, 0 = until disarmed)</label><input type="number" min="0" id="f-light_duration"></div>
+            </div>
+            <div class="field" style="margin-top:14px;">
+              <label>Armed indicator color</label>
+              <div class="colorline">
+                <input type="color" id="f-armed_light_color" value="#ff0000">
+                <span class="hint" style="margin:0;">Bulbs in "Armed indicator lights" turn this color while armed and turn off on disarm.</span>
+              </div>
             </div>
           </section>
 
@@ -435,9 +587,12 @@
             <h2><ha-icon icon="mdi:cellphone-message"></ha-icon> Phone notifications</h2>
             <p class="hint">Sent when the alarm triggers, a leak is detected, or arming fails.</p>
             <div id="notify-list"></div>
+            <label class="checkline" style="border-top:1px solid var(--fss-border); margin-top:8px; padding-top:14px;">
+              <input type="checkbox" id="f-notify_arm_disarm"> Also notify on every arm / disarm
+            </label>
           </section>
 
-          <button id="save-btn">SAVE SETTINGS</button>
+          <button id="save-btn" class="save-btn">SAVE SETTINGS</button>
         </div>
       </main>
       <div id="toast"></div>`;
@@ -482,9 +637,19 @@
         }
       });
 
-      this.$("#view-settings").addEventListener("change", () => { this._dirty = true; });
-      this.$("#view-settings").addEventListener("input", () => { this._dirty = true; });
+      const markDirty = () => { this._dirty = true; };
+      this.$("#view-settings").addEventListener("change", markDirty);
+      this.$("#view-settings").addEventListener("input", markDirty);
       this.$("#save-btn").addEventListener("click", () => this._saveSettings());
+
+      this.$("#f-siren_volume").addEventListener("input", (e) => {
+        this.$("#volume-label").textContent = `${e.target.value}%`;
+      });
+
+      const markSchDirty = () => { this._schDirty = true; this._updateScheduleRowStyles(); };
+      this.$("#view-schedule").addEventListener("change", markSchDirty);
+      this.$("#view-schedule").addEventListener("input", markSchDirty);
+      this.$("#save-schedule-btn").addEventListener("click", () => this._saveSchedule());
     }
 
     _switchTab(tab) {
@@ -493,6 +658,8 @@
       this.$$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${tab}`));
       if (tab === "devices") this._refreshAddSelects(true);
       if (tab === "settings" && !this._dirty) this._populateSettings();
+      if (tab === "schedule" && !this._schDirty) this._populateSchedule();
+      if (tab === "health") this._renderHealth();
     }
 
     /* ------------------------------------------------------------- actions */
@@ -520,7 +687,10 @@
         if (el.type === "number") v = Math.max(0, parseInt(v, 10) || 0);
         data[f] = v;
       }
+      data.siren_volume = parseInt(this.$("#f-siren_volume").value, 10);
+      data.armed_light_color = this.$("#f-armed_light_color").value;
       data.flood_siren = this.$("#f-flood_siren").checked;
+      data.notify_arm_disarm = this.$("#f-notify_arm_disarm").checked;
       data.notify_services = this.$$("#notify-list input:checked").map((c) => c.value);
 
       this._hass
@@ -528,6 +698,28 @@
         .then(() => {
           this._dirty = false;
           this._toast("Settings saved ✓");
+        })
+        .catch((err) => this._toast(`Save failed: ${err.message || err}`, false));
+    }
+
+    _saveSchedule() {
+      const schedules = {};
+      for (const [key] of DAYS) {
+        schedules[key] = {
+          enabled: this.$(`.sch-en[data-day="${key}"]`).checked,
+          arm: this.$(`.sch-arm[data-day="${key}"]`).value || "22:00",
+          disarm: this.$(`.sch-disarm[data-day="${key}"]`).value || "07:00",
+        };
+      }
+      this._hass
+        .callService("fullstacksecurity", "update_config", {
+          action: "settings",
+          schedules_enabled: this.$("#sch-enabled").checked,
+          schedules,
+        })
+        .then(() => {
+          this._schDirty = false;
+          this._toast("Schedule saved ✓");
         })
         .catch((err) => this._toast(`Save failed: ${err.message || err}`, false));
     }
@@ -544,15 +736,18 @@
       this._renderHero(alarm);
       this._renderFloodBanner();
       this._renderSensorGrid();
+      this._renderHistory();
 
       const sig = JSON.stringify(Object.keys(LISTS).map((k) => this._configured(k)));
       const cfgChanged = sig !== this._configSig;
       this._configSig = sig;
 
       this._renderDeviceLists();
+      if (this._tab === "health") this._renderHealth();
       if (cfgChanged) {
         this._refreshAddSelects(false);
         if (!this._dirty) this._populateSettings();
+        if (!this._schDirty) this._populateSchedule();
       }
     }
 
@@ -573,6 +768,7 @@
         sub = open.length
           ? `Open now: ${open.map((e) => this._name(e)).join(", ")}`
           : `Ready — ${secCount} sensor${secCount === 1 ? "" : "s"} closed`;
+        if (a.schedules_enabled) sub += " · schedule on";
       } else if (alarm.state === "armed_away") {
         sub = `Monitoring ${secCount} sensor${secCount === 1 ? "" : "s"}`;
       } else if (alarm.state === "arming") {
@@ -618,10 +814,11 @@
     }
 
     _renderFloodBanner() {
-      const flood = Object.values(this._hass.states).find(
-        (s) => s.entity_id.startsWith("binary_sensor.") &&
-          s.attributes.friendly_name === "FullStack Security Flood Alert"
-      ) || this._hass.states["binary_sensor.fullstack_security_flood_alert"];
+      const flood = this._hass.states["binary_sensor.fullstack_security_flood_alert"] ||
+        Object.values(this._hass.states).find(
+          (s) => s.entity_id.startsWith("binary_sensor.") &&
+            s.attributes.friendly_name === "FullStack Security Flood Alert"
+        );
       const banner = this.$("#flood-banner");
       const wet = flood && flood.state === "on" ? (flood.attributes.wet_sensors || []) : [];
       banner.hidden = wet.length === 0;
@@ -652,6 +849,24 @@
         `<div class="empty">No sensors yet — add door, vibration and flood sensors in the Devices tab.</div>`;
     }
 
+    _renderHistory() {
+      const hist = (this._attrs().history || []).slice(-10).reverse();
+      const fmt = (t) => {
+        const d = new Date(t);
+        return isNaN(d) ? "" : d.toLocaleString([], {
+          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+        });
+      };
+      this.$("#history-list").innerHTML = hist.length
+        ? hist.map((h) => `
+            <div class="hist-row">
+              <ha-icon icon="${HISTORY_ICONS[h.i] || "mdi:information-outline"}"></ha-icon>
+              <span class="when">${fmt(h.t)}</span>
+              <span class="what">${h.m}</span>
+            </div>`).join("")
+        : `<div class="empty">No activity yet.</div>`;
+    }
+
     _renderDeviceLists() {
       for (const key of Object.keys(LISTS)) {
         const el = this.$(`[data-devlist="${key}"]`);
@@ -665,7 +880,7 @@
     _refreshAddSelects(force) {
       for (const key of Object.keys(LISTS)) {
         const sel = this.$(`[data-addsel="${key}"]`);
-        if (!force && document.activeElement === sel) continue;
+        if (!force && this.shadowRoot.activeElement === sel) continue;
         const prev = sel.value;
         const opts = this._candidates(key)
           .map((e) => `<option value="${e}">${this._name(e)} (${e})</option>`)
@@ -675,19 +890,99 @@
       }
     }
 
+    /* ------------------------------------------------------------- health */
+
+    _renderHealth() {
+      const rows = [];
+      for (const [key, meta] of Object.entries(LISTS)) {
+        for (const id of this._configured(key)) {
+          const s = this._hass.states[id];
+          const unavailable = !s || s.state === "unavailable" || s.state === "unknown";
+          rows.push({
+            id, key, meta,
+            unavailable,
+            battery: this._batteryFor(id),
+            lqi: this._lqiFor(id),
+          });
+        }
+      }
+      // Problems first: unavailable, then low battery, then the rest.
+      rows.sort((a, b) => {
+        const rank = (r) => (r.unavailable ? 0 : (r.battery !== null && r.battery < 20 ? 1 : 2));
+        return rank(a) - rank(b) || this._name(a.id).localeCompare(this._name(b.id));
+      });
+
+      const unavailCount = rows.filter((r) => r.unavailable).length;
+      const lowBatt = rows.filter((r) => !r.unavailable && r.battery !== null && r.battery < 20).length;
+      const okCount = rows.length - unavailCount - lowBatt;
+
+      this.$("#health-summary").innerHTML = `
+        <span class="chip good"><ha-icon icon="mdi:check-circle"></ha-icon>${okCount} healthy</span>
+        <span class="chip ${lowBatt ? "warn" : ""}"><ha-icon icon="mdi:battery-alert"></ha-icon>${lowBatt} low battery</span>
+        <span class="chip ${unavailCount ? "bad" : ""}"><ha-icon icon="mdi:lan-disconnect"></ha-icon>${unavailCount} unavailable</span>`;
+
+      const battPill = (r) => {
+        if (r.battery === null) return `<span class="pill idle static">MAINS / N/A</span>`;
+        const v = Math.round(r.battery);
+        const cls = v < 20 ? "alert" : (v < 50 ? "warn" : "safe");
+        return `<span class="pill ${cls} static">🔋 ${v}%</span>`;
+      };
+
+      this.$("#health-list").innerHTML = rows.length
+        ? rows.map((r) => `
+            <div class="row">
+              <ha-icon icon="${r.meta.icon}"></ha-icon>
+              <span class="nm">${this._name(r.id)}<span class="eid">${r.id}</span></span>
+              <span class="h-meta">
+                <span class="lqi">${r.lqi !== null ? `LQI ${Math.round(r.lqi)}` : ""}</span>
+                ${battPill(r)}
+                <span class="pill ${r.unavailable ? "alert" : "safe"} static">${r.unavailable ? "OFFLINE" : "ONLINE"}</span>
+              </span>
+            </div>`).join("")
+        : `<div class="empty">No devices configured yet.</div>`;
+    }
+
+    /* ----------------------------------------------------------- schedule */
+
+    _populateSchedule() {
+      const a = this._attrs();
+      this.$("#sch-enabled").checked = a.schedules_enabled === true;
+      const sch = a.schedules || {};
+      for (const [key] of DAYS) {
+        const row = sch[key] || {};
+        this.$(`.sch-en[data-day="${key}"]`).checked = row.enabled === true;
+        if (row.arm) this.$(`.sch-arm[data-day="${key}"]`).value = row.arm;
+        if (row.disarm) this.$(`.sch-disarm[data-day="${key}"]`).value = row.disarm;
+      }
+      this._updateScheduleRowStyles();
+    }
+
+    _updateScheduleRowStyles() {
+      for (const [key] of DAYS) {
+        const en = this.$(`.sch-en[data-day="${key}"]`).checked;
+        this.$(`.sch-row[data-day="${key}"]`).classList.toggle("off", !en);
+      }
+    }
+
+    /* ----------------------------------------------------------- settings */
+
     _populateSettings() {
       const a = this._attrs();
       const set = (id, v) => { const el = this.$(id); if (el) el.value = v; };
       set("#f-arming_delay", a.arming_delay ?? 30);
       set("#f-entry_delay", a.entry_delay ?? 30);
       set("#f-siren_duration", a.siren_duration ?? 300);
+      set("#f-siren_volume", a.siren_volume ?? 100);
+      this.$("#volume-label").textContent = `${a.siren_volume ?? 100}%`;
       set("#f-light_mode", a.light_mode || "flash_long");
       set("#f-light_duration", a.light_duration ?? 0);
+      set("#f-armed_light_color", /^#[0-9a-fA-F]{6}$/.test(a.armed_light_color || "") ? a.armed_light_color : "#ff0000");
       set("#f-button_single", a.button_single || "arm");
       set("#f-button_double", a.button_double || "disarm");
       set("#f-button_triple", a.button_triple || "none");
       set("#f-button_hold", a.button_hold || "none");
       this.$("#f-flood_siren").checked = a.flood_siren !== false;
+      this.$("#f-notify_arm_disarm").checked = a.notify_arm_disarm === true;
 
       // Siren tones from the configured sirens.
       const tones = new Set();

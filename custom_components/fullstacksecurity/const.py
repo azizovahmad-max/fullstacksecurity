@@ -1,7 +1,7 @@
 """Constants for the FullStack Security integration."""
 
 DOMAIN = "fullstacksecurity"
-VERSION = "2.0.1"
+VERSION = "2.1.0"
 
 PANEL_URL_PATH = "fullstacksecurity"
 PANEL_NAME = "fullstacksecurity-panel"
@@ -18,6 +18,7 @@ CONF_VIBRATION = "vibration"
 CONF_FLOOD = "flood"
 CONF_SIRENS = "sirens"
 CONF_LIGHTS = "lights"
+CONF_ARMED_LIGHTS = "armed_lights"
 CONF_BUTTONS = "buttons"
 
 ENTITY_LIST_KEYS = (
@@ -26,6 +27,7 @@ ENTITY_LIST_KEYS = (
     CONF_FLOOD,
     CONF_SIRENS,
     CONF_LIGHTS,
+    CONF_ARMED_LIGHTS,
     CONF_BUTTONS,
 )
 
@@ -34,29 +36,41 @@ CONF_ARMING_DELAY = "arming_delay"
 CONF_ENTRY_DELAY = "entry_delay"
 CONF_SIREN_DURATION = "siren_duration"
 CONF_SIREN_TONE = "siren_tone"
+CONF_SIREN_VOLUME = "siren_volume"
 CONF_LIGHT_MODE = "light_mode"
 CONF_LIGHT_DURATION = "light_duration"
+CONF_ARMED_LIGHT_COLOR = "armed_light_color"
 CONF_NOTIFY_SERVICES = "notify_services"
+CONF_NOTIFY_ARM_DISARM = "notify_arm_disarm"
 CONF_FLOOD_SIREN = "flood_siren"
 CONF_BUTTON_SINGLE = "button_single"
 CONF_BUTTON_DOUBLE = "button_double"
 CONF_BUTTON_TRIPLE = "button_triple"
 CONF_BUTTON_HOLD = "button_hold"
+CONF_SCHEDULES_ENABLED = "schedules_enabled"
+CONF_SCHEDULES = "schedules"
 
 SETTINGS_KEYS = (
     CONF_ARMING_DELAY,
     CONF_ENTRY_DELAY,
     CONF_SIREN_DURATION,
     CONF_SIREN_TONE,
+    CONF_SIREN_VOLUME,
     CONF_LIGHT_MODE,
     CONF_LIGHT_DURATION,
+    CONF_ARMED_LIGHT_COLOR,
     CONF_NOTIFY_SERVICES,
+    CONF_NOTIFY_ARM_DISARM,
     CONF_FLOOD_SIREN,
     CONF_BUTTON_SINGLE,
     CONF_BUTTON_DOUBLE,
     CONF_BUTTON_TRIPLE,
     CONF_BUTTON_HOLD,
+    CONF_SCHEDULES_ENABLED,
+    CONF_SCHEDULES,
 )
+
+WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 DEFAULTS = {
     CONF_DOORS: [],
@@ -64,19 +78,25 @@ DEFAULTS = {
     CONF_FLOOD: [],
     CONF_SIRENS: [],
     CONF_LIGHTS: [],
+    CONF_ARMED_LIGHTS: [],
     CONF_BUTTONS: [],
     CONF_ARMING_DELAY: 30,
     CONF_ENTRY_DELAY: 30,
     CONF_SIREN_DURATION: 300,
     CONF_SIREN_TONE: "",
+    CONF_SIREN_VOLUME: 100,
     CONF_LIGHT_MODE: "flash_long",
     CONF_LIGHT_DURATION: 0,
+    CONF_ARMED_LIGHT_COLOR: "#ff0000",
     CONF_NOTIFY_SERVICES: [],
+    CONF_NOTIFY_ARM_DISARM: False,
     CONF_FLOOD_SIREN: True,
     CONF_BUTTON_SINGLE: "arm",
     CONF_BUTTON_DOUBLE: "disarm",
     CONF_BUTTON_TRIPLE: "none",
     CONF_BUTTON_HOLD: "none",
+    CONF_SCHEDULES_ENABLED: False,
+    CONF_SCHEDULES: {},
 }
 
 BUTTON_ACTIONS = ("arm", "disarm", "toggle", "none")

@@ -38,9 +38,16 @@ async def async_notify_all(
 
 
 async def async_sirens_on(
-    hass: HomeAssistant, sirens: list[str], tone: str, duration: int
+    hass: HomeAssistant,
+    sirens: list[str],
+    tone: str,
+    duration: int,
+    volume: int = 100,
 ) -> None:
-    """Turn on sirens; real siren entities get tone/duration, switches a plain on."""
+    """Turn on sirens; real siren entities get tone/duration/volume, switches a plain on.
+
+    volume is a percentage (0-100) mapped to siren volume_level (0.0-1.0).
+    """
     real_sirens = [e for e in sirens if e.startswith("siren.")]
     others = [e for e in sirens if not e.startswith("siren.")]
 
@@ -50,6 +57,8 @@ async def async_sirens_on(
             data["tone"] = tone
         if duration:
             data["duration"] = duration
+        if volume is not None and int(volume) < 100:
+            data["volume_level"] = max(0, min(100, int(volume))) / 100
         try:
             await hass.services.async_call("siren", "turn_on", data, blocking=False)
         except Exception as err:  # noqa: BLE001 - some sirens reject tone/duration
