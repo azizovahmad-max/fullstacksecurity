@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v23.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v24.js")
         
         js_content = """class FullStackSecurityCardV16 extends HTMLElement {
   set panel(panel) {
@@ -352,17 +352,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
               </div>
               
               <div id="content-actions" style="display: none;">
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Siren Tone:</label>
+                <select id="siren-tone-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                  <option value="">Default (No Tone)</option>
+                </select>
+                
                 <label style="display:block; margin-bottom: 5px; color: #ccc;">Siren Duration (seconds):</label>
                 <input type="number" id="siren-duration-input" min="0" placeholder="0 = infinite" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
                 
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Siren Tone (optional):</label>
-                <input type="text" id="siren-tone-input" placeholder="e.g. fire, alarm" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Flashing Lights (comma-separated entities):</label>
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Action Lights (comma-separated entities):</label>
                 <input type="text" id="flash-lights-input" placeholder="light.living_room, light.kitchen" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
                 
-                <label style="display:block; margin-bottom: 5px; color: #ccc;">Phone Notifications (notify.* services):</label>
-                <input type="text" id="notify-phones-input" placeholder="notify.mobile_app_iphone, notify.all" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Light Action Mode:</label>
+                <select id="light-mode-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                  <option value="flash_long">Flash Long</option>
+                  <option value="flash_short">Flash Short</option>
+                  <option value="solid_red">Solid Red</option>
+                  <option value="solid_white">Solid White</option>
+                </select>
+
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Light Action Duration (seconds):</label>
+                <input type="number" id="light-duration-input" min="0" placeholder="0 = infinite" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Phone Notifications:</label>
+                <div id="notify-phones-container" style="max-height: 150px; overflow-y: auto; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                </div>
               </div>
               
               <button id="save-settings-btn" class="save-btn" style="width:100%; margin-top: 10px; border-radius: 6px;">Save Settings</button>
@@ -455,9 +469,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         this.querySelector('#btn-triple-select').value = attrs.button_triple || 'none';
         
         this.querySelector('#siren-duration-input').value = attrs.siren_duration || '';
-        this.querySelector('#siren-tone-input').value = attrs.siren_tone || '';
         this.querySelector('#flash-lights-input').value = (attrs.flash_lights || []).join(', ');
-        this.querySelector('#notify-phones-input').value = attrs.notify_phones || '';
+        this.querySelector('#light-mode-select').value = attrs.light_mode || 'flash_long';
+        this.querySelector('#light-duration-input').value = attrs.light_duration || '';
+        
+        // Populate Siren Tones
+        const sirens = attrs.sirens || [];
+        let availableTones = new Set();
+        sirens.forEach(s => {
+           const tones = this._hass.states[s]?.attributes?.available_tones;
+           if (tones && Array.isArray(tones)) {
+               if (typeof tones[0] === 'object') {
+                   tones.forEach(t => t.name ? availableTones.add(t.name) : (t.id ? availableTones.add(t.id) : null));
+               } else {
+                   tones.forEach(t => availableTones.add(t));
+               }
+           }
+        });
+        
+        const toneSelect = this.querySelector('#siren-tone-select');
+        let toneOptions = '<option value="">Default (No Tone)</option>';
+        availableTones.forEach(tone => {
+            const selected = (attrs.siren_tone === tone) ? 'selected' : '';
+            toneOptions += `<option value="${tone}" ${selected}>${tone}</option>`;
+        });
+        toneSelect.innerHTML = toneOptions;
+        
+        // Populate Phone Notifications
+        const savedPhones = (attrs.notify_phones || '').split(',').map(p => p.trim());
+        const notifyContainer = this.querySelector('#notify-phones-container');
+        let phonesHtml = '';
+        const notifyServices = Object.keys(this._hass.services.notify || {});
+        if (notifyServices.length === 0) {
+            phonesHtml = '<div style="color:#64748b; font-size:12px;">No notify services found</div>';
+        } else {
+            notifyServices.forEach(svc => {
+                const isChecked = savedPhones.includes(`notify.${svc}`) ? 'checked' : '';
+                phonesHtml += `<label style="display:block; margin-bottom: 5px;"><input type="checkbox" class="notify-phone-checkbox" value="notify.${svc}" ${isChecked}> ${svc}</label>`;
+            });
+        }
+        notifyContainer.innerHTML = phonesHtml;
         
         this.settingsModal.style.display = 'flex';
       });
@@ -497,9 +548,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         const triple = this.querySelector('#btn-triple-select').value;
         
         const duration = this.querySelector('#siren-duration-input').value;
-        const tone = this.querySelector('#siren-tone-input').value;
+        const tone = this.querySelector('#siren-tone-select').value;
         const flash = this.querySelector('#flash-lights-input').value.split(',').map(s => s.trim()).filter(s => s);
-        const notify = this.querySelector('#notify-phones-input').value;
+        const lightMode = this.querySelector('#light-mode-select').value;
+        const lightDuration = this.querySelector('#light-duration-input').value;
+        
+        const notifyCheckboxes = this.querySelectorAll('.notify-phone-checkbox:checked');
+        let notify = [];
+        notifyCheckboxes.forEach(cb => notify.push(cb.value));
+        const notifyStr = notify.join(',');
         
         this.saveSettingsBtn.innerText = 'Saving...';
         this._hass.callService("fullstacksecurity", "update_config", {
@@ -512,7 +569,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             siren_duration: duration ? parseInt(duration) : 0,
             siren_tone: tone,
             flash_lights: flash,
-            notify_phones: notify
+            light_mode: lightMode,
+            light_duration: lightDuration ? parseInt(lightDuration) : 0,
+            notify_phones: notifyStr
         }).then(() => {
             setTimeout(() => {
                 this.settingsModal.style.display = 'none';
@@ -757,7 +816,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v23.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v24.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
@@ -783,6 +842,10 @@ window.customCards.push({
             new_options = dict(entry.options)
             if "bg_color" in call.data:
                 new_options["bg_color"] = call.data.get("bg_color")
+            if "light_mode" in call.data:
+                new_options["light_mode"] = call.data.get("light_mode")
+            if "light_duration" in call.data:
+                new_options["light_duration"] = call.data.get("light_duration")
             if "arming_delay" in call.data:
                 new_options["arming_delay"] = call.data.get("arming_delay")
             if "button_single" in call.data:

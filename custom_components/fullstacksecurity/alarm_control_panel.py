@@ -49,6 +49,8 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
         self._siren_duration = int(options.get("siren_duration", 0))
         self._siren_tone = options.get("siren_tone", "")
         self._flash_lights = options.get("flash_lights", [])
+        self._light_mode = options.get("light_mode", "flash_long")
+        self._light_duration = options.get("light_duration", 0)
         notify_phones_str = options.get("notify_phones", "")
         self._notify_phones = [n.strip() for n in notify_phones_str.split(",") if n.strip()] if notify_phones_str else []
         self._bg_color = options.get("bg_color", "default")
@@ -118,6 +120,8 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
             "siren_duration": self._siren_duration,
             "siren_tone": self._siren_tone,
             "flash_lights": self._flash_lights,
+            "light_mode": self._light_mode,
+            "light_duration": self._light_duration,
             "notify_phones": ",".join(self._notify_phones),
             "bg_color": self._bg_color,
         }
@@ -139,6 +143,8 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
             await self.hass.services.async_call("homeassistant", "turn_off", {ATTR_ENTITY_ID: self._sirens}, blocking=False)
         if self._lights:
             await self.hass.services.async_call("homeassistant", "turn_off", {ATTR_ENTITY_ID: self._lights}, blocking=False)
+        if self._flash_lights:
+            await self.hass.services.async_call("homeassistant", "turn_off", {ATTR_ENTITY_ID: self._flash_lights}, blocking=False)
             
         self.async_write_ha_state()
         _LOGGER.info("FullStackSecurity is disarmed.")
@@ -202,12 +208,31 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
         if self._lights:
             await self.hass.services.async_call("homeassistant", "turn_on", {ATTR_ENTITY_ID: self._lights}, blocking=False)
             
-        # Flash lights
+        # Action Lights
         if self._flash_lights:
+            service_data = {ATTR_ENTITY_ID: self._flash_lights}
+            if self._light_mode == "flash_long":
+                service_data["flash"] = "long"
+            elif self._light_mode == "flash_short":
+                service_data["flash"] = "short"
+            elif self._light_mode == "solid_red":
+                service_data["color_name"] = "red"
+            elif self._light_mode == "solid_white":
+                service_data["color_name"] = "white"
+                
             try:
-                await self.hass.services.async_call("light", "turn_on", {ATTR_ENTITY_ID: self._flash_lights, "flash": "long"}, blocking=False)
+                await self.hass.services.async_call("light", "turn_on", service_data, blocking=False)
             except Exception as e:
-                _LOGGER.error("Failed to flash lights: %s", e)
+                _LOGGER.error("Failed to turn on action lights: %s", e)
+                
+            if int(self._light_duration) > 0:
+                @callback
+                def _turn_off_action_lights(now):
+                    if self._state == AlarmControlPanelState.TRIGGERED:
+                        self.hass.async_create_task(
+                            self.hass.services.async_call("homeassistant", "turn_off", {ATTR_ENTITY_ID: self._flash_lights}, blocking=False)
+                        )
+                async_call_later(self.hass, int(self._light_duration), _turn_off_action_lights)
         
         # Notify
         friendly_name = trigger_entity
