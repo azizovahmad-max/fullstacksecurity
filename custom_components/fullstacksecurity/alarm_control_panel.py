@@ -45,6 +45,13 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
             "triple": options.get("button_triple", "none")
         }
         
+        # Trigger Actions
+        self._siren_duration = int(options.get("siren_duration", 0))
+        self._siren_tone = options.get("siren_tone", "")
+        self._flash_lights = options.get("flash_lights", [])
+        notify_phones_str = options.get("notify_phones", "")
+        self._notify_phones = [n.strip() for n in notify_phones_str.split(",") if n.strip()] if notify_phones_str else []
+        
         notify_option = options.get("notify", "")
         self._notifiers = [n.strip() for n in notify_option.split(",") if n.strip()] if notify_option else []
         
@@ -107,6 +114,10 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
             "button_single": self._button_mappings["single"],
             "button_double": self._button_mappings["double"],
             "button_triple": self._button_mappings["triple"],
+            "siren_duration": self._siren_duration,
+            "siren_tone": self._siren_tone,
+            "flash_lights": self._flash_lights,
+            "notify_phones": ",".join(self._notify_phones),
         }
 
     @property
@@ -171,11 +182,30 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
 
         # Turn on sirens
         if self._sirens:
+            service_data = {ATTR_ENTITY_ID: self._sirens}
+            if self._siren_duration:
+                service_data["duration"] = self._siren_duration
+            if self._siren_tone:
+                service_data["tone"] = self._siren_tone
+                
+            try:
+                await self.hass.services.async_call("siren", "turn_on", service_data, blocking=False)
+            except Exception as e:
+                _LOGGER.error("Failed to call siren.turn_on: %s", e)
+                
+            # Fallback for switches disguised as sirens
             await self.hass.services.async_call("homeassistant", "turn_on", {ATTR_ENTITY_ID: self._sirens}, blocking=False)
         
         # Turn on lights
         if self._lights:
             await self.hass.services.async_call("homeassistant", "turn_on", {ATTR_ENTITY_ID: self._lights}, blocking=False)
+            
+        # Flash lights
+        if self._flash_lights:
+            try:
+                await self.hass.services.async_call("light", "turn_on", {ATTR_ENTITY_ID: self._flash_lights, "flash": "long"}, blocking=False)
+            except Exception as e:
+                _LOGGER.error("Failed to flash lights: %s", e)
         
         # Notify
         friendly_name = trigger_entity
@@ -183,10 +213,12 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
         if state_obj and state_obj.name:
             friendly_name = state_obj.name
 
-        for notifier in self._notifiers:
-            domain, service = notifier.split(".", 1)
-            await self.hass.services.async_call(
-                domain, service,
-                {"message": f"ALARM TRIGGERED! Sensor {friendly_name} detected activity."},
-                blocking=False
-            )
+        all_notifiers = set(self._notifiers + self._notify_phones)
+        for notifier in all_notifiers:
+            if "." in notifier:
+                domain, service = notifier.split(".", 1)
+                await self.hass.services.async_call(
+                    domain, service,
+                    {"message": f"ALARM TRIGGERED! Sensor {friendly_name} detected activity."},
+                    blocking=False
+                )

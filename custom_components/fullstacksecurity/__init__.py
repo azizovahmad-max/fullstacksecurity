@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v20.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v21.js")
         
         js_content = """class FullStackSecurityCardV16 extends HTMLElement {
   set panel(panel) {
@@ -308,33 +308,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
           
           <!-- Settings Modal -->
           <div id="settings-modal" class="modal-overlay" style="display: none;">
-            <div class="modal-content">
+            <div class="modal-content" style="max-width: 500px;">
               <span class="close-btn" id="settings-close">&times;</span>
-              <h3 style="margin-top: 0; color: white;">Global Settings</h3>
+              <h3 style="margin-top: 0; color: white;">Settings</h3>
               
-              <label style="display:block; margin-bottom: 5px; color: #ccc;">Arming Delay (seconds):</label>
-              <input type="number" id="arming-delay-input" min="0" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+              <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+                <button id="tab-general" style="background: none; border: none; color: white; cursor: pointer; padding: 5px 10px; border-bottom: 2px solid #ef4444;">General</button>
+                <button id="tab-actions" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 5px 10px; border-bottom: 2px solid transparent;">Trigger Actions</button>
+              </div>
               
-              <label style="display:block; margin-bottom: 5px; color: #ccc;">Single Tap Action:</label>
-              <select id="btn-single-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                <option value="arm">Arm System</option>
-                <option value="disarm">Disarm System</option>
-                <option value="none">Do Nothing</option>
-              </select>
+              <div id="content-general">
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Arming Delay (seconds):</label>
+                <input type="number" id="arming-delay-input" min="0" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Single Tap Action:</label>
+                <select id="btn-single-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                  <option value="arm">Arm System</option>
+                  <option value="disarm">Disarm System</option>
+                  <option value="none">Do Nothing</option>
+                </select>
+                
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Double Tap Action:</label>
+                <select id="btn-double-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                  <option value="arm">Arm System</option>
+                  <option value="disarm">Disarm System</option>
+                  <option value="none">Do Nothing</option>
+                </select>
+                
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Triple Tap Action:</label>
+                <select id="btn-triple-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                  <option value="arm">Arm System</option>
+                  <option value="disarm">Disarm System</option>
+                  <option value="none">Do Nothing</option>
+                </select>
+              </div>
               
-              <label style="display:block; margin-bottom: 5px; color: #ccc;">Double Tap Action:</label>
-              <select id="btn-double-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                <option value="arm">Arm System</option>
-                <option value="disarm">Disarm System</option>
-                <option value="none">Do Nothing</option>
-              </select>
-              
-              <label style="display:block; margin-bottom: 5px; color: #ccc;">Triple Tap Action:</label>
-              <select id="btn-triple-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
-                <option value="arm">Arm System</option>
-                <option value="disarm">Disarm System</option>
-                <option value="none">Do Nothing</option>
-              </select>
+              <div id="content-actions" style="display: none;">
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Siren Duration (seconds):</label>
+                <input type="number" id="siren-duration-input" min="0" placeholder="0 = infinite" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Siren Tone (optional):</label>
+                <input type="text" id="siren-tone-input" placeholder="e.g. fire, alarm" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Flashing Lights (comma-separated entities):</label>
+                <input type="text" id="flash-lights-input" placeholder="light.living_room, light.kitchen" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+                
+                <label style="display:block; margin-bottom: 5px; color: #ccc;">Phone Notifications (notify.* services):</label>
+                <input type="text" id="notify-phones-input" placeholder="notify.mobile_app_iphone, notify.all" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
+              </div>
               
               <button id="save-settings-btn" class="save-btn" style="width:100%; margin-top: 10px; border-radius: 6px;">Save Settings</button>
             </div>
@@ -423,7 +444,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         this.querySelector('#btn-single-select').value = attrs.button_single || 'arm';
         this.querySelector('#btn-double-select').value = attrs.button_double || 'disarm';
         this.querySelector('#btn-triple-select').value = attrs.button_triple || 'none';
+        
+        this.querySelector('#siren-duration-input').value = attrs.siren_duration || '';
+        this.querySelector('#siren-tone-input').value = attrs.siren_tone || '';
+        this.querySelector('#flash-lights-input').value = (attrs.flash_lights || []).join(', ');
+        this.querySelector('#notify-phones-input').value = attrs.notify_phones || '';
+        
         this.settingsModal.style.display = 'flex';
+      });
+      
+      const tabGeneral = this.querySelector('#tab-general');
+      const tabActions = this.querySelector('#tab-actions');
+      const contentGeneral = this.querySelector('#content-general');
+      const contentActions = this.querySelector('#content-actions');
+      
+      tabGeneral.addEventListener('click', () => {
+          tabGeneral.style.borderBottom = '2px solid #ef4444';
+          tabGeneral.style.color = 'white';
+          tabActions.style.borderBottom = '2px solid transparent';
+          tabActions.style.color = '#94a3b8';
+          contentGeneral.style.display = 'block';
+          contentActions.style.display = 'none';
+      });
+      
+      tabActions.addEventListener('click', () => {
+          tabActions.style.borderBottom = '2px solid #ef4444';
+          tabActions.style.color = 'white';
+          tabGeneral.style.borderBottom = '2px solid transparent';
+          tabGeneral.style.color = '#94a3b8';
+          contentActions.style.display = 'block';
+          contentGeneral.style.display = 'none';
       });
       
       this.settingsClose.addEventListener('click', () => {
@@ -436,13 +486,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         const double = this.querySelector('#btn-double-select').value;
         const triple = this.querySelector('#btn-triple-select').value;
         
+        const duration = this.querySelector('#siren-duration-input').value;
+        const tone = this.querySelector('#siren-tone-input').value;
+        const flash = this.querySelector('#flash-lights-input').value.split(',').map(s => s.trim()).filter(s => s);
+        const notify = this.querySelector('#notify-phones-input').value;
+        
         this.saveSettingsBtn.innerText = 'Saving...';
         this._hass.callService("fullstacksecurity", "update_config", {
             action: 'settings',
             arming_delay: parseInt(delay),
             button_single: single,
             button_double: double,
-            button_triple: triple
+            button_triple: triple,
+            siren_duration: duration ? parseInt(duration) : 0,
+            siren_tone: tone,
+            flash_lights: flash,
+            notify_phones: notify
         }).then(() => {
             setTimeout(() => {
                 this.settingsModal.style.display = 'none';
@@ -677,7 +736,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v20.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v21.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
@@ -709,6 +768,14 @@ window.customCards.push({
                 new_options["button_double"] = call.data.get("button_double")
             if "button_triple" in call.data:
                 new_options["button_triple"] = call.data.get("button_triple")
+            if "siren_duration" in call.data:
+                new_options["siren_duration"] = call.data.get("siren_duration")
+            if "siren_tone" in call.data:
+                new_options["siren_tone"] = call.data.get("siren_tone")
+            if "flash_lights" in call.data:
+                new_options["flash_lights"] = call.data.get("flash_lights")
+            if "notify_phones" in call.data:
+                new_options["notify_phones"] = call.data.get("notify_phones")
             hass.config_entries.async_update_entry(entry, options=new_options)
             await hass.config_entries.async_reload(entry.entry_id)
             return
