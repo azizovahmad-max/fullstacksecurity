@@ -180,7 +180,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       this.mainContainer = this.querySelector('#main-container');
       
       this.actionBtn.addEventListener('click', () => {
-        const entityId = (this.config && this.config.entity) || 'alarm_control_panel.full_stack_security';
+        const entityId = (this.config && this.config.entity) || 'alarm_control_panel.fullstack_security';
         if (this._state === 'disarmed') {
           this._hass.callService('alarm_control_panel', 'alarm_arm_away', { entity_id: entityId });
         } else {
@@ -189,7 +189,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       });
     }
 
-    const entityId = (this.config && this.config.entity) || 'alarm_control_panel.full_stack_security';
+    const entityId = (this.config && this.config.entity) || 'alarm_control_panel.fullstack_security';
     const stateObj = hass.states[entityId];
     if (!stateObj) {
       this.statusBadge.innerText = "NOT CONFIGURED";
@@ -304,7 +304,7 @@ window.customCards.push({
                     "embed_iframe": False,
                     "trust_external": False,
                 },
-                "entity": f"alarm_control_panel.full_stack_security",
+                "entity": f"alarm_control_panel.fullstack_security",
                 "sensors": sensors
             },
             require_admin=False,
