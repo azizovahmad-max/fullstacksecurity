@@ -88,6 +88,16 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
         return self._state
 
     @property
+    def extra_state_attributes(self):
+        """Return the state attributes."""
+        return {
+            "doors": self._doors,
+            "vibration": self._vibrations,
+            "sirens": self._sirens,
+            "buttons": self._buttons,
+        }
+
+    @property
     def supported_features(self) -> int:
         """Return the list of supported features."""
         return AlarmControlPanelEntityFeature.ARM_AWAY

@@ -67,7 +67,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             padding: 40px;
             color: #f8fafc;
             box-shadow: var(--glass-shadow);
-            max-width: 480px;
+            max-width: 580px;
             margin: 20px auto;
             text-align: center;
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -81,11 +81,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             background: var(--status-color, #4ade80);
             transition: background 0.4s ease;
           }
+          .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+          }
           h1 {
-            margin: 0 0 10px 0;
+            margin: 0;
             font-size: 28px;
             font-weight: 700;
             letter-spacing: -0.5px;
+          }
+          .config-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #e2e8f0;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+          }
+          .config-btn:hover {
+            background: rgba(255,255,255,0.2);
           }
           .status-badge {
             display: inline-block;
@@ -100,6 +120,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             border: 1px solid var(--status-color, #4ade80);
             margin-bottom: 30px;
             transition: all 0.3s ease;
+          }
+          .group-title {
+            text-align: left;
+            font-size: 14px;
+            font-weight: 700;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+            margin-top: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 5px;
           }
           .sensors-list {
             text-align: left;
@@ -132,6 +164,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
           }
           .sensor-state.safe { color: #4ade80; }
           .sensor-state.alert { color: #f87171; animation: pulse 2s infinite; }
+          .sensor-state.neutral { color: #fbbf24; }
           
           .action-btn {
             background: var(--status-color, #4ade80);
@@ -167,7 +200,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
           }
         </style>
         <div class="container" id="main-container">
-          <h1>FullStack Security</h1>
+          <div class="header-row">
+            <h1>FullStack Security</h1>
+            <button class="config-btn" id="config-btn">Configure</button>
+          </div>
           <div class="status-badge" id="status-badge">INITIALIZING</div>
           <div class="sensors-list" id="sensors-list"></div>
           <button class="action-btn" id="action-btn">PLEASE WAIT</button>
@@ -178,6 +214,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       this.sensorsList = this.querySelector('#sensors-list');
       this.actionBtn = this.querySelector('#action-btn');
       this.mainContainer = this.querySelector('#main-container');
+      this.configBtn = this.querySelector('#config-btn');
       
       this.actionBtn.addEventListener('click', () => {
         const entity = this._entityId || 'alarm_control_panel.fullstack_security';
@@ -187,18 +224,38 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
           this._hass.callService('alarm_control_panel', 'alarm_disarm', { entity_id: entity });
         }
       });
+      
+      this.configBtn.addEventListener('click', () => {
+        const configEntryId = (this._panel && this._panel.config && this._panel.config.config_entry_id) || null;
+        if (configEntryId) {
+            window.dispatchEvent(new CustomEvent('hass-more-info', {
+              detail: { entityId: this._entityId },
+              bubbles: true,
+              composed: true,
+            }));
+            
+            if (window.location.pathname.includes('fullstacksecurity')) {
+               window.location.href = `/config/integrations/integration/fullstacksecurity`;
+            }
+        } else {
+            window.dispatchEvent(new CustomEvent('hass-more-info', {
+              detail: { entityId: this._entityId },
+              bubbles: true,
+              composed: true,
+            }));
+        }
+      });
     }
 
     let entityId = this.config && this.config.entity;
     
-    // Auto-detect if explicitly provided entity doesn't exist or isn't provided
     if (!entityId || !hass.states[entityId]) {
       const allAlarms = Object.keys(hass.states).filter(k => k.startsWith('alarm_control_panel.'));
       const found = allAlarms.find(k => k.includes('fullstack') || k.includes('full_stack'));
       if (found) {
         entityId = found;
       } else {
-        entityId = 'alarm_control_panel.fullstack_security'; // fallback
+        entityId = 'alarm_control_panel.fullstack_security'; 
       }
     }
     this._entityId = entityId;
@@ -215,31 +272,60 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     this._state = stateObj.state;
     this.updateStatus(this._state);
     
-    const sensors = (this.config && this.config.sensors) ? this.config.sensors : [];
-    if (sensors && Array.isArray(sensors) && sensors.length > 0) {
-      let sensorsHtml = '';
-      sensors.forEach(sensorId => {
-        const sensorObj = hass.states[sensorId];
-        if (sensorObj) {
-          const name = sensorObj.attributes.friendly_name || sensorId.split('.')[1].replace(/_/g, ' ');
-          const state = sensorObj.state;
-          const isSafe = (state === 'off');
-          const stateClass = isSafe ? 'safe' : 'alert';
-          const stateText = isSafe ? 'SECURE' : 'DETECTED';
-          
-          sensorsHtml += `
-            <div class="sensor-item">
-              <span class="sensor-name">${name}</span>
-              <span class="sensor-state ${stateClass}">
-                ${stateText}
-              </span>
-            </div>
-          `;
-        }
-      });
-      this.sensorsList.innerHTML = sensorsHtml;
+    // Read the attributes exposed by the python backend
+    const attrs = stateObj.attributes || {};
+    const doors = attrs.doors || [];
+    const vibrations = attrs.vibration || [];
+    const sirens = attrs.sirens || [];
+
+    let sensorsHtml = '';
+    
+    const renderGroup = (title, items, type) => {
+        if (!items || items.length === 0) return '';
+        let html = `<div class="group-title">${title}</div>`;
+        items.forEach(sensorId => {
+            const sensorObj = hass.states[sensorId];
+            if (sensorObj) {
+                const name = sensorObj.attributes.friendly_name || sensorId.split('.')[1].replace(/_/g, ' ');
+                const state = sensorObj.state;
+                let stateClass = '';
+                let stateText = '';
+                
+                if (type === 'door') {
+                    const isSafe = (state === 'off' || state === 'closed');
+                    stateClass = isSafe ? 'safe' : 'alert';
+                    stateText = isSafe ? 'CLOSED' : 'OPEN';
+                } else if (type === 'vibration') {
+                    const isSafe = (state === 'off' || state === 'clear');
+                    stateClass = isSafe ? 'safe' : 'alert';
+                    stateText = isSafe ? 'CLEAR' : 'DETECTED';
+                } else if (type === 'siren') {
+                    const isOn = (state === 'on');
+                    stateClass = isOn ? 'alert' : 'safe';
+                    stateText = isOn ? 'SOUNDING' : 'OFF';
+                }
+                
+                html += `
+                  <div class="sensor-item">
+                    <span class="sensor-name">${name}</span>
+                    <span class="sensor-state ${stateClass}">
+                      ${stateText}
+                    </span>
+                  </div>
+                `;
+            }
+        });
+        return html;
+    };
+
+    sensorsHtml += renderGroup('Doors', doors, 'door');
+    sensorsHtml += renderGroup('Vibration Sensors', vibrations, 'vibration');
+    sensorsHtml += renderGroup('Sirens & Alarms', sirens, 'siren');
+
+    if (sensorsHtml === '') {
+      this.sensorsList.innerHTML = `<div class="sensor-item"><span class="sensor-name" style="color:#64748b; font-style:italic;">No sensors connected. Click Configure to add them.</span></div>`;
     } else {
-      this.sensorsList.innerHTML = `<div class="sensor-item"><span class="sensor-name" style="color:#64748b; font-style:italic;">No sensors connected.</span></div>`;
+      this.sensorsList.innerHTML = sensorsHtml;
     }
   }
 
@@ -288,8 +374,7 @@ window.customCards.push({
   name: "FullStack Security Card",
   preview: true,
   description: "A custom card and panel for the FullStack Security plugin."
-});
-"""
+});"""
         
         async with aiofiles.open(js_path, "w") as f:
             await f.write(js_content)
@@ -319,6 +404,7 @@ window.customCards.push({
                     "trust_external": False,
                 },
                 "entity": f"alarm_control_panel.fullstack_security",
+                "config_entry_id": entry.entry_id,
                 "sensors": sensors
             },
             require_admin=False,
