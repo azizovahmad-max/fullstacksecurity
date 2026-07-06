@@ -28,9 +28,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v30.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v31.js")
         
-        js_content = """class FullStackSecurityCardV28 extends HTMLElement {
+        js_content = """class FullStackSecurityCardV31 extends HTMLElement {
   set panel(panel) {
     this._panel = panel;
     if (panel && panel.config) {
@@ -282,7 +282,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             50% { box-shadow: 0 0 50px rgba(248, 113, 113, 0.6); }
             100% { box-shadow: 0 0 20px rgba(248, 113, 113, 0.2); }
           }
-        </style>
+        
+          .save-btn {
+            background: #22c55e;
+            color: #fff;
+            border: none;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(34,197,94,0.3);
+            margin-top: 20px;
+          }
+          .save-btn:hover {
+            background: #16a34a;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(34,197,94,0.4);
+          }
+</style>
         <ha-card id="main-container">
           <div class="header-row" style="margin-bottom: 0;">
             <h1>FullStack Security</h1>
@@ -292,6 +312,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             <button class="main-tab active" id="nav-overview">Overview</button>
             <button class="main-tab" id="nav-sensors">Sensors</button>
             <button class="main-tab" id="nav-settings">Settings</button>
+            <button class="main-tab" id="nav-actions">Actions</button>
           </div>
           
           <!-- OVERVIEW TAB -->
@@ -330,12 +351,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
           
           <!-- SETTINGS TAB -->
           <div id="tab-settings-content" class="tab-section">
-            <div style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
-              <button id="tab-general" style="background: none; border: none; color: white; cursor: pointer; padding: 5px 10px; border-bottom: 2px solid #ef4444;">General</button>
-              <button id="tab-actions" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 5px 10px; border-bottom: 2px solid transparent;">Trigger Actions</button>
-            </div>
-            
-            <div id="content-general">
               <label style="display:block; margin-bottom: 5px; color: #ccc;">Background Color:</label>
               <select id="bg-color-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
                 <option value="default">System Default</option>
@@ -367,9 +382,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 <option value="disarm">Disarm System</option>
                 <option value="none">Do Nothing</option>
               </select>
-            </div>
-            
-            <div id="content-actions" style="display: none;">
+              
+            <button id="save-settings-btn" class="save-btn">Save Settings</button>
+          </div>
+          
+          <!-- ACTIONS TAB -->
+          <div id="tab-actions-content" class="tab-section">
               <label style="display:block; margin-bottom: 5px; color: #ccc;">Siren Tone:</label>
               <select id="siren-tone-select" style="width:100%; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
                 <option value="">Default (No Tone)</option>
@@ -395,9 +413,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
               <label style="display:block; margin-bottom: 5px; color: #ccc;">Phone Notifications:</label>
               <div id="notify-phones-container" style="max-height: 150px; overflow-y: auto; padding: 10px; margin-bottom: 20px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.3); color: white; box-sizing: border-box;">
               </div>
-            </div>
-            
-            <button id="save-settings-btn" class="save-btn" style="width:100%; margin-top: 10px; border-radius: 6px;">Save Settings</button>
+              
+              <button id="save-actions-btn" class="save-btn">Save Actions</button>
           </div>
         </ha-card>
       `;
@@ -417,19 +434,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       this.navOverview = this.querySelector('#nav-overview');
       this.navSensors = this.querySelector('#nav-sensors');
       this.navSettings = this.querySelector('#nav-settings');
+      this.navActions = this.querySelector('#nav-actions');
       
       this.tabOverview = this.querySelector('#tab-overview-content');
       this.tabSensors = this.querySelector('#tab-sensors-content');
       this.tabSettings = this.querySelector('#tab-settings-content');
+      this.tabActions = this.querySelector('#tab-actions-content');
       
       this.entitySelect = this.querySelector('#entity-select');
       this.typeSelect = this.querySelector('#type-select');
       this.addEntityBtn = this.querySelector('#add-entity-btn');
       this.saveSettingsBtn = this.querySelector('#save-settings-btn');
+      this.saveActionsBtn = this.querySelector('#save-actions-btn');
       
       const switchTab = (activeNav, activeTab) => {
-        [this.navOverview, this.navSensors, this.navSettings].forEach(n => n.classList.remove('active'));
-        [this.tabOverview, this.tabSensors, this.tabSettings].forEach(t => t.classList.remove('active'));
+        [this.navOverview, this.navSensors, this.navSettings, this.navActions].forEach(n => n.classList.remove('active'));
+        [this.tabOverview, this.tabSensors, this.tabSettings, this.tabActions].forEach(t => t.classList.remove('active'));
         activeNav.classList.add('active');
         activeTab.classList.add('active');
       };
@@ -791,7 +811,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
   }
 }
 
-try { customElements.define("fullstacksecurity-card", FullStackSecurityCardV28); } catch(e) {}
+try { customElements.define("fullstacksecurity-card", FullStackSecurityCardV31); } catch(e) {}
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "fullstacksecurity-card",
@@ -823,7 +843,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v30.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v31.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
