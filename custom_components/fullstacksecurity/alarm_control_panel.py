@@ -20,29 +20,31 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "fullstacksecurity"
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up the FullStackSecurity alarm control panel platform."""
-    plugin_config = hass.data[DOMAIN].get("config", {})
-    async_add_entities([FullStackSecurityAlarm(hass, plugin_config)], True)
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    """Set up the FullStackSecurity alarm control panel from a config entry."""
+    options = config_entry.options
+    async_add_entities([FullStackSecurityAlarm(hass, options)], True)
 
 class FullStackSecurityAlarm(AlarmControlPanelEntity):
     """Representation of a FullStackSecurity alarm."""
 
-    def __init__(self, hass, config):
+    def __init__(self, hass, options):
         """Initialize the alarm."""
         self.hass = hass
         self._name = "FullStack Security"
         self._state = STATE_ALARM_DISARMED
-        self._config = config
         
-        self._doors = config.get("doors", [])
-        self._vibrations = config.get("vibration", [])
-        self._sirens = config.get("sirens", [])
-        self._lights = config.get("lights", [])
-        self._buttons = config.get("buttons", [])
-        self._notifiers = config.get("notify", [])
+        self._doors = options.get("doors", [])
+        self._vibrations = options.get("vibration", [])
+        self._sirens = options.get("sirens", [])
+        self._lights = options.get("lights", [])
+        self._buttons = options.get("buttons", [])
+        
+        notify_option = options.get("notify", "")
+        self._notifiers = [n.strip() for n in notify_option.split(",") if n.strip()] if notify_option else []
         
         self._arming_timer = None
+        self._unsub_listener = None
 
     async def async_added_to_hass(self):
         """Run when entity about to be added to hass."""
@@ -71,9 +73,10 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity):
         # Track all configured sensors and buttons
         all_entities = self._doors + self._vibrations + self._buttons
         if all_entities:
-            self.async_on_remove(
-                async_track_state_change_event(self.hass, all_entities, async_sensor_changed)
+            self._unsub_listener = async_track_state_change_event(
+                self.hass, all_entities, async_sensor_changed
             )
+            self.async_on_remove(self._unsub_listener)
 
     @property
     def name(self):

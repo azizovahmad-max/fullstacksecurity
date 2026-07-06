@@ -1,0 +1,43 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure FullStack Security",
+        "description": "Select the entities you want to include in your security system.",
+        "data": {
+          "doors": "Door Sensors",
+          "vibration": "Vibration / Glass Break Sensors",
+          "sirens": "Sirens / Alarms",
+          "lights": "Lights (to turn on when triggered)",
+          "buttons": "Action Buttons (Single click to arm, double to disarm)",
+          "notify": "Notify Service (e.g. notify.notify)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured",
+      "single_instance_allowed": "Only a single instance is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure FullStack Security Options",
+        "description": "Update the entities included in your security system.",
+        "data": {
+          "doors": "Door Sensors",
+          "vibration": "Vibration / Glass Break Sensors",
+          "sirens": "Sirens / Alarms",
+          "lights": "Lights (to turn on when triggered)",
+          "buttons": "Action Buttons (Single click to arm, double to disarm)",
+          "notify": "Notify Service (e.g. notify.notify)"
+        }
+      }
+    }
+  }
+}
