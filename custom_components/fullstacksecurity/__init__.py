@@ -28,9 +28,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v27.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v28.js")
         
-        js_content = """class FullStackSecurityCardV16 extends HTMLElement {
+        js_content = """class FullStackSecurityCardV28 extends HTMLElement {
   set panel(panel) {
     this._panel = panel;
     if (panel && panel.config) {
@@ -658,7 +658,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 <span class="sensor-name">${name}</span>
                 <span class="sensor-state ${stateClass}" ${customStyle}>
                   ${stateText}
-                  <button class="remove-btn" onclick="this.getRootNode().host.removeSensor('${sensorId}', '${type === 'door' ? 'doors' : (type === 'vibration' ? 'vibration' : (type === 'light' ? 'lights' : (type === 'button' ? 'buttons' : 'sirens')))}')">X</button>
+                  <button class="remove-btn" onclick="this.closest('fullstacksecurity-card').removeSensor('${sensorId}', '${type === 'door' ? 'doors' : (type === 'vibration' ? 'vibration' : (type === 'light' ? 'lights' : (type === 'button' ? 'buttons' : 'sirens')))}')">X</button>
                 </span>
               </div>
             `;
@@ -784,11 +784,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
   }
 }
 
-try { customElements.define("fullstacksecurity-card", FullStackSecurityCardV16); } catch(e) {}
+try { customElements.define("fullstacksecurity-card", FullStackSecurityCardV28); } catch(e) {}
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: "fullstacksecurity-card-v15",
-  name: "FullStack Security Card V15",
+  type: "fullstacksecurity-card",
+  name: "FullStack Security Card V28",
   preview: true,
   description: "A custom card and panel for the FullStack Security plugin."
 });"""
@@ -816,7 +816,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v27.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v28.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
