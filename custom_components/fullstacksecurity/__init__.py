@@ -28,9 +28,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not os.path.exists(www_dir):
             os.makedirs(www_dir)
             
-        js_path = os.path.join(www_dir, "fullstacksecurity-card-v31.js")
+        js_path = os.path.join(www_dir, "fullstacksecurity-card-v32.js")
         
-        js_content = """class FullStackSecurityCardV31 extends HTMLElement {
+        js_content = """class FullStackSecurityCardV32 extends HTMLElement {
   set panel(panel) {
     this._panel = panel;
     if (panel && panel.config) {
@@ -490,7 +490,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         this.querySelector('#btn-single-select').value = attrs.button_single || 'arm';
         this.querySelector('#btn-double-select').value = attrs.button_double || 'disarm';
         this.querySelector('#btn-triple-select').value = attrs.button_triple || 'none';
-        
+      });
+      
+      this.navActions.addEventListener('click', () => {
+        switchTab(this.navActions, this.tabActions);
+
+        const attrs = this._hass.states[this._entityId]?.attributes || {};
         this.querySelector('#siren-duration-input').value = attrs.siren_duration || '';
         this.querySelector('#flash-lights-input').value = (attrs.flash_lights || []).join(', ');
         this.querySelector('#light-mode-select').value = attrs.light_mode || 'flash_long';
@@ -511,10 +516,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         });
         
         const toneSelect = this.querySelector('#siren-tone-select');
-        let toneOptions = '<option value="">Default (No Tone)</option>';
-        availableTones.forEach(tone => {
-            const selected = (attrs.siren_tone === tone) ? 'selected' : '';
-            toneOptions += `<option value="${tone}" ${selected}>${tone}</option>`;
+        const savedTone = attrs.siren_tone || '';
+        let toneOptions = `<option value="">Default (No Tone)</option>`;
+        availableTones.forEach(t => {
+            const isSelected = (savedTone === t) ? 'selected' : '';
+            toneOptions += `<option value="${t}" ${isSelected}>${t}</option>`;
         });
         toneSelect.innerHTML = toneOptions;
         
@@ -534,29 +540,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         notifyContainer.innerHTML = phonesHtml;
       });
       
-      const tabGeneral = this.querySelector('#tab-general');
-      const tabActions = this.querySelector('#tab-actions');
-      const contentGeneral = this.querySelector('#content-general');
-      const contentActions = this.querySelector('#content-actions');
-      
-      tabGeneral.addEventListener('click', () => {
-          tabGeneral.style.borderBottom = '2px solid #ef4444';
-          tabGeneral.style.color = 'white';
-          tabActions.style.borderBottom = '2px solid transparent';
-          tabActions.style.color = '#94a3b8';
-          contentGeneral.style.display = 'block';
-          contentActions.style.display = 'none';
-      });
-      
-      tabActions.addEventListener('click', () => {
-          tabActions.style.borderBottom = '2px solid #ef4444';
-          tabActions.style.color = 'white';
-          tabGeneral.style.borderBottom = '2px solid transparent';
-          tabGeneral.style.color = '#94a3b8';
-          contentActions.style.display = 'block';
-          contentGeneral.style.display = 'none';
-      });
-      this.saveSettingsBtn.addEventListener('click', () => {
+      const saveConfig = (btn) => {
         const bg_color = this.querySelector('#bg-color-select').value;
         const delay = this.querySelector('#arming-delay-input').value;
         const single = this.querySelector('#btn-single-select').value;
@@ -574,11 +558,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         notifyCheckboxes.forEach(cb => notify.push(cb.value));
         const notifyStr = notify.join(',');
         
-        this.saveSettingsBtn.innerText = 'Saving...';
+        const oldText = btn.innerText;
+        btn.innerText = 'Saving...';
         this._hass.callService("fullstacksecurity", "update_config", {
             action: 'settings',
             bg_color: bg_color,
-            arming_delay: parseInt(delay),
+            arming_delay: parseInt(delay) || 30,
             button_single: single,
             button_double: double,
             button_triple: triple,
@@ -590,13 +575,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             notify_phones: notifyStr
         }).then(() => {
             setTimeout(() => {
-                this.saveSettingsBtn.innerText = 'Save Settings';
+                btn.innerText = oldText;
             }, 500);
         });
-      });
+      };
+      
+      this.saveSettingsBtn.addEventListener('click', () => saveConfig(this.saveSettingsBtn));
+      this.saveActionsBtn.addEventListener('click', () => saveConfig(this.saveActionsBtn));
     }
 
-    let entityId = this.config && this.config.entity;
+    let entityId = this.config entityId = this.config && this.config.entity;
     if (!entityId || !hass.states[entityId]) {
       const allAlarms = Object.keys(hass.states).filter(k => k.startsWith('alarm_control_panel.'));
       const found = allAlarms.find(k => k.includes('fullstack') || k.includes('full_stack'));
@@ -811,7 +799,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
   }
 }
 
-try { customElements.define("fullstacksecurity-card", FullStackSecurityCardV31); } catch(e) {}
+try { customElements.define("fullstacksecurity-card", FullStackSecurityCardV32); } catch(e) {}
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "fullstacksecurity-card",
@@ -843,7 +831,7 @@ window.customCards.push({
             config={
                 "_panel_custom": {
                     "name": "fullstacksecurity-card",
-                    "js_url": "/local/fullstacksecurity-card-v31.js?v=1.0.13",
+                    "js_url": "/local/fullstacksecurity-card-v32.js?v=1.0.13",
                     "embed_iframe": False,
                     "trust_external": False,
                 },
