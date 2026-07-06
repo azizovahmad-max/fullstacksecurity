@@ -3,6 +3,7 @@ import os
 import aiofiles
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.components.frontend import async_register_built_in_panel, async_remove_panel
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -286,7 +287,33 @@ window.customCards.push({
     # Store options for the alarm panel to use
     hass.data[DOMAIN][entry.entry_id] = entry.options
 
+
+    # Register Sidebar Panel
+    try:
+        sensors = entry.options.get("doors", []) + entry.options.get("vibration", [])
+        async_register_built_in_panel(
+            hass,
+            component_name="custom",
+            sidebar_title="Security",
+            sidebar_icon="mdi:shield-home",
+            frontend_url_path="fullstacksecurity",
+            config={
+                "_panel_custom": {
+                    "name": "fullstacksecurity-card",
+                    "js_url": "/local/fullstacksecurity-card.js?v=1.0.7",
+                    "embed_iframe": False,
+                    "trust_external": False,
+                },
+                "entity": f"alarm_control_panel.full_stack_security",
+                "sensors": sensors
+            },
+            require_admin=False,
+        )
+    except Exception as e:
+        _LOGGER.error("Failed to register sidebar panel: %s", e)
+        
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
 
     # Listen for options updates
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
@@ -295,9 +322,15 @@ window.customCards.push({
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
+        try:
+            async_remove_panel(hass, "fullstacksecurity")
+        except:
+            pass
+
     return unload_ok
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
