@@ -180,21 +180,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
       this.mainContainer = this.querySelector('#main-container');
       
       this.actionBtn.addEventListener('click', () => {
-        const entityId = (this.config && this.config.entity) || 'alarm_control_panel.fullstack_security';
+        const entity = this._entityId || 'alarm_control_panel.fullstack_security';
         if (this._state === 'disarmed') {
-          this._hass.callService('alarm_control_panel', 'alarm_arm_away', { entity_id: entityId });
+          this._hass.callService('alarm_control_panel', 'alarm_arm_away', { entity_id: entity });
         } else {
-          this._hass.callService('alarm_control_panel', 'alarm_disarm', { entity_id: entityId });
+          this._hass.callService('alarm_control_panel', 'alarm_disarm', { entity_id: entity });
         }
       });
     }
 
-    const entityId = (this.config && this.config.entity) || 'alarm_control_panel.fullstack_security';
+    let entityId = this.config && this.config.entity;
+    
+    // Auto-detect if explicitly provided entity doesn't exist or isn't provided
+    if (!entityId || !hass.states[entityId]) {
+      const allAlarms = Object.keys(hass.states).filter(k => k.startsWith('alarm_control_panel.'));
+      const found = allAlarms.find(k => k.includes('fullstack') || k.includes('full_stack'));
+      if (found) {
+        entityId = found;
+      } else {
+        entityId = 'alarm_control_panel.fullstack_security'; // fallback
+      }
+    }
+    this._entityId = entityId;
+
     const stateObj = hass.states[entityId];
     if (!stateObj) {
       this.statusBadge.innerText = "NOT CONFIGURED";
       this.statusBadge.style.color = "#94a3b8";
       this.statusBadge.style.borderColor = "#94a3b8";
+      this.sensorsList.innerHTML = `<div class="sensor-item"><span class="sensor-name" style="color:#64748b; font-size:12px;">Entity not found: ${entityId}. Check HA logs.</span></div>`;
       return;
     }
 
