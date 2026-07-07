@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel/card (v2.5.0) */
+/* FullStack Security - sidebar panel/card (v2.6.0) */
 (() => {
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },
@@ -35,7 +35,7 @@
     "button_triple", "button_hold",
   ];
   const CONFIG_ATTRS = [
-    ...Object.keys(LISTS), ...SETTINGS_FIELDS, "siren_volume",
+    ...Object.keys(LISTS), "mqtt_buttons", ...SETTINGS_FIELDS, "siren_volume",
     "armed_light_color", "flood_siren", "notify_services",
     "notify_arm_disarm", "schedules_enabled", "schedules",
   ];
@@ -398,6 +398,22 @@
           color: #fff; background: var(--primary-color);
         }
         .addrow button:hover { filter: brightness(1.1); }
+        .addrow input { flex: 1; }
+        .mqtt-block {
+          margin-top: 16px; padding: 14px; border-radius: 10px;
+          border: 1px solid var(--fss-border);
+          background: color-mix(in srgb, var(--primary-color) 6%, transparent);
+        }
+        .mqtt-title {
+          display: flex; align-items: center; gap: 8px;
+          font-size: 13px; font-weight: 700; margin-bottom: 6px;
+        }
+        .mqtt-title ha-icon { --mdc-icon-size: 18px; color: var(--primary-color); }
+        details.adv { margin-top: 12px; }
+        details.adv summary {
+          cursor: pointer; font-size: 12px; color: var(--secondary-text-color);
+          user-select: none; padding: 4px 0;
+        }
         .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
         @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
         .field label { display: block; font-size: 12px; font-weight: 600; color: var(--secondary-text-color); margin-bottom: 6px; }
@@ -512,10 +528,22 @@
                 <button data-addbtn="${key}">ADD</button>
               </div>
               ${key === "buttons" ? `
-              <div class="addrow">
-                <input type="text" data-manual="${key}" placeholder="Or type entity id, e.g. sensor.remote_action">
-                <button data-manualbtn="${key}">ADD ID</button>
-              </div>` : ""}
+              <div class="mqtt-block">
+                <div class="mqtt-title"><ha-icon icon="mdi:zigbee"></ha-icon> zigbee2mqtt button (recommended)</div>
+                <p class="hint">Many zigbee buttons (e.g. TS004F) never create an entity — they only send presses over MQTT. Add yours by its exact zigbee2mqtt device name.</p>
+                <div data-mqttlist></div>
+                <div class="addrow">
+                  <input type="text" id="mqtt-btn-input" placeholder="z2m name, e.g. SecuritySwitch">
+                  <button id="mqtt-btn-add">ADD</button>
+                </div>
+              </div>
+              <details class="adv">
+                <summary>Advanced: add by entity id</summary>
+                <div class="addrow" style="margin-top:10px;">
+                  <input type="text" data-manual="${key}" placeholder="e.g. sensor.remote_action">
+                  <button data-manualbtn="${key}">ADD ID</button>
+                </div>
+              </details>` : ""}
             </section>`).join("")}
         </div>
 
@@ -698,6 +726,37 @@
             this._toast(`Add failed: ${err.message || err}`, false);
           }).finally(() => {
             manual.disabled = false;
+          });
+        }
+        const rmMqtt = e.target.closest("[data-removemqtt]");
+        if (rmMqtt) {
+          const name = rmMqtt.dataset.removemqtt;
+          if (confirm(`Remove z2m button "${name}"?`)) {
+            this._hass.callService("fullstacksecurity", "update_config", {
+              action: "remove", type: "mqtt_buttons", entity_id: name,
+            });
+            this._toast(`Removed ${name}`);
+          }
+          return;
+        }
+        const addMqtt = e.target.closest("#mqtt-btn-add");
+        if (addMqtt) {
+          const input = this.$("#mqtt-btn-input");
+          const name = (input.value || "").trim();
+          if (!name) return this._toast("Enter the zigbee2mqtt name", false);
+          if ((this._attrs().mqtt_buttons || []).includes(name)) {
+            return this._toast(`${name} is already added`, false);
+          }
+          addMqtt.disabled = true;
+          this._hass.callService("fullstacksecurity", "update_config", {
+            action: "add", type: "mqtt_buttons", entity_id: name,
+          }).then(() => {
+            this._toast(`Added ${name} — press it to test`);
+            input.value = "";
+          }).catch((err) => {
+            this._toast(`Add failed: ${err.message || err}`, false);
+          }).finally(() => {
+            addMqtt.disabled = false;
           });
         }
       });
@@ -971,6 +1030,22 @@
           ? items.map((e) => this._rowHtml(key, e, true)).join("")
           : `<div class="empty">Nothing added yet.</div>`;
       }
+      this._renderMqttButtons();
+    }
+
+    _renderMqttButtons() {
+      const el = this.$("[data-mqttlist]");
+      if (!el) return;
+      const items = this._attrs().mqtt_buttons || [];
+      el.innerHTML = items.length
+        ? items.map((name) => `
+          <div class="row">
+            <ha-icon icon="mdi:zigbee"></ha-icon>
+            <span class="nm">${name}<span class="eid">zigbee2mqtt/${name}</span></span>
+            <span class="pill idle">MQTT</span>
+            <button class="rm" title="Remove" data-removemqtt="${name}"><ha-icon icon="mdi:close"></ha-icon></button>
+          </div>`).join("")
+        : `<div class="empty">No zigbee2mqtt buttons added yet.</div>`;
     }
 
     _refreshAddSelects(force) {

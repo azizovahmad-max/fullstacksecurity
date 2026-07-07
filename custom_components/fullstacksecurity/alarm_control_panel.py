@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import timedelta
 
@@ -32,6 +33,7 @@ from .const import (
     CONF_BUTTON_SINGLE,
     CONF_BUTTON_TRIPLE,
     CONF_BUTTONS,
+    CONF_MQTT_BUTTONS,
     CONF_DOORS,
     CONF_ENTRY_DELAY,
     CONF_FLOOD,
@@ -127,6 +129,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._lights: list[str] = list(opt(options, CONF_LIGHTS))
         self._armed_lights: list[str] = list(opt(options, CONF_ARMED_LIGHTS))
         self._buttons: list[str] = list(opt(options, CONF_BUTTONS))
+        self._mqtt_buttons: list[str] = list(opt(options, CONF_MQTT_BUTTONS))
 
         self._arming_delay = int(opt(options, CONF_ARMING_DELAY))
         self._entry_delay = int(opt(options, CONF_ENTRY_DELAY))
@@ -188,6 +191,64 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self.async_on_remove(
             async_track_time_change(self.hass, self._schedule_tick, second=0)
         )
+
+        # Subscribe to zigbee2mqtt button topics directly. Many z2m buttons
+        # (e.g. TS004F) only publish their presses to MQTT and never create an
+        # HA entity, so watching state changes is not enough.
+        if self._mqtt_buttons:
+            self.hass.async_create_task(self._async_subscribe_mqtt_buttons())
+
+    async def _async_subscribe_mqtt_buttons(self) -> None:
+        """Subscribe to each configured z2m button MQTT topic."""
+        try:
+            from homeassistant.components import mqtt
+        except ImportError:
+            _LOGGER.error("MQTT integration unavailable; z2m buttons disabled")
+            return
+        try:
+            if not await mqtt.async_wait_for_mqtt_client(self.hass):
+                _LOGGER.error(
+                    "MQTT client not connected; z2m buttons %s will not work",
+                    self._mqtt_buttons,
+                )
+                return
+        except Exception as err:  # noqa: BLE001 - never break setup over MQTT
+            _LOGGER.error("Could not wait for MQTT client: %s", err)
+            return
+
+        for name in self._mqtt_buttons:
+            topic = name if "/" in name else f"zigbee2mqtt/{name}"
+            try:
+                unsub = await mqtt.async_subscribe(
+                    self.hass, topic, self._mqtt_button_message
+                )
+            except Exception as err:  # noqa: BLE001 - one bad topic must not kill the rest
+                _LOGGER.error("Failed to subscribe to %s: %s", topic, err)
+                continue
+            self.async_on_remove(unsub)
+            _LOGGER.info("Subscribed to z2m button topic %s", topic)
+
+    @callback
+    def _mqtt_button_message(self, msg) -> None:
+        """Handle an incoming z2m button MQTT payload."""
+        # Ignore retained messages so a stale action can't fire on (re)connect.
+        if getattr(msg, "retain", False):
+            return
+        try:
+            data = json.loads(msg.payload)
+        except (ValueError, TypeError):
+            return
+        if not isinstance(data, dict):
+            return
+        action = data.get("action")
+        if not action:
+            return
+        press = _classify_button_press(str(action))
+        if press is None:
+            _LOGGER.debug("MQTT button %s: unmapped action %s", msg.topic, action)
+            return
+        _LOGGER.debug("MQTT button %s: %s -> press %s", msg.topic, action, press)
+        self._apply_button_press(press)
 
     async def async_will_remove_from_hass(self) -> None:
         self._cancel_timer()
@@ -290,6 +351,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             "lights": self._lights,
             "armed_lights": self._armed_lights,
             "buttons": self._buttons,
+            "mqtt_buttons": self._mqtt_buttons,
             "arming_delay": self._arming_delay,
             "entry_delay": self._entry_delay,
             "siren_duration": self._siren_duration,
@@ -361,8 +423,13 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             press = _classify_button_press(str(raw))
         if press is None:
             return
+        _LOGGER.debug("Button %s: %s -> press %s", new_state.entity_id, raw, press)
+        self._apply_button_press(press)
+
+    @callback
+    def _apply_button_press(self, press: str) -> None:
+        """Run the configured arm/disarm/toggle action for a button press."""
         action = self._button_actions.get(press, "none")
-        _LOGGER.debug("Button %s: %s -> %s", new_state.entity_id, raw, action)
         if action == "toggle":
             action = (
                 "disarm"

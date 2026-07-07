@@ -15,8 +15,10 @@ automations to write.
 - 💧 **Flood sensors monitored 24/7** — water leaks sound the sirens and
   notify your phones even when the system is disarmed
 - 🔘 **Wireless buttons** arm/disarm the system (single / double / triple /
-  hold actions, each mappable). Works with both `event` entities and the
-  legacy zigbee2mqtt `*_action` sensors
+  hold actions, each mappable). Works with `event` entities, legacy
+  zigbee2mqtt `*_action` sensors, **and buttons that only publish over MQTT**
+  (e.g. TS004F) — add those by their zigbee2mqtt device name and the plugin
+  subscribes to `zigbee2mqtt/<name>` directly, no entity required
 - 📢 **Sirens** with preset sound/tone, duration and volume (real `siren`
   entities and switch-based sirens both supported)
 - 💡 **Lights** flash or turn solid red/white when the alarm triggers
@@ -67,7 +69,10 @@ Copy `custom_components/fullstacksecurity` into your Home Assistant
    (one click, no options — everything is configured in the panel)
 2. A **Security** item appears in the sidebar
 3. Open it → **Devices** tab → add your door sensors, vibration sensors,
-   flood sensors, sirens, lights and buttons from the dropdowns
+   flood sensors, sirens, lights and buttons from the dropdowns. For a
+   zigbee button that doesn't appear in the dropdown, use the **zigbee2mqtt
+   button** box in the Buttons section and type its exact z2m device name
+   (the name shown in the zigbee2mqtt frontend, e.g. `SecuritySwitch`)
 4. **Settings** tab → set delays, siren tone/volume/duration, light actions,
    armed indicator color, button actions and tick the phones that should get
    notifications → **Save settings**

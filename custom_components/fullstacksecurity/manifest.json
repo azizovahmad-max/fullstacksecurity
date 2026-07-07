@@ -4,10 +4,11 @@
   "codeowners": ["@azizovahmad-max"],
   "config_flow": true,
   "dependencies": ["http", "frontend"],
+  "after_dependencies": ["mqtt"],
   "documentation": "https://github.com/azizovahmad-max/fullstacksecurity",
   "integration_type": "hub",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/azizovahmad-max/fullstacksecurity/issues",
   "requirements": [],
-  "version": "2.5.0"
+  "version": "2.6.0"
 }

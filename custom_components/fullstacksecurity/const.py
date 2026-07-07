@@ -1,7 +1,7 @@
 """Constants for the FullStack Security integration."""
 
 DOMAIN = "fullstacksecurity"
-VERSION = "2.5.0"
+VERSION = "2.6.0"
 
 PANEL_URL_PATH = "fullstacksecurity"
 PANEL_NAME = "fullstacksecurity-panel"
@@ -20,6 +20,7 @@ CONF_SIRENS = "sirens"
 CONF_LIGHTS = "lights"
 CONF_ARMED_LIGHTS = "armed_lights"
 CONF_BUTTONS = "buttons"
+CONF_MQTT_BUTTONS = "mqtt_buttons"
 
 ENTITY_LIST_KEYS = (
     CONF_DOORS,
@@ -29,6 +30,7 @@ ENTITY_LIST_KEYS = (
     CONF_LIGHTS,
     CONF_ARMED_LIGHTS,
     CONF_BUTTONS,
+    CONF_MQTT_BUTTONS,
 )
 
 # Settings option keys
@@ -80,6 +82,7 @@ DEFAULTS = {
     CONF_LIGHTS: [],
     CONF_ARMED_LIGHTS: [],
     CONF_BUTTONS: [],
+    CONF_MQTT_BUTTONS: [],
     CONF_ARMING_DELAY: 30,
     CONF_ENTRY_DELAY: 30,
     CONF_SIREN_DURATION: 300,
