@@ -1,7 +1,5 @@
-/* FullStack Security - sidebar panel (v2.4.1) */
+/* FullStack Security - sidebar panel/card (v2.5.0) */
 (() => {
-  if (customElements.get("fullstacksecurity-panel")) return;
-
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },
     vibration: { title: "Vibration sensors", icon: "mdi:vibrate" },
@@ -513,6 +511,11 @@
                 <select data-addsel="${key}"><option value="">Select an entity…</option></select>
                 <button data-addbtn="${key}">ADD</button>
               </div>
+              ${key === "buttons" ? `
+              <div class="addrow">
+                <input type="text" data-manual="${key}" placeholder="Or type entity id, e.g. sensor.remote_action">
+                <button data-manualbtn="${key}">ADD ID</button>
+              </div>` : ""}
             </section>`).join("")}
         </div>
 
@@ -674,6 +677,27 @@
             this._toast(`Add failed: ${err.message || err}`, false);
           }).finally(() => {
             add.disabled = false;
+          });
+        }
+        const manual = e.target.closest("[data-manualbtn]");
+        if (manual) {
+          const key = manual.dataset.manualbtn;
+          const input = this.$(`[data-manual="${key}"]`);
+          const entityId = (input.value || "").trim();
+          if (!/^[a-z0-9_]+\.[a-z0-9_]+$/.test(entityId)) {
+            return this._toast("Enter a valid entity id", false);
+          }
+          manual.disabled = true;
+          this._hass.callService("fullstacksecurity", "update_config", {
+            action: "add", type: key, entity_id: entityId,
+          }).then(() => {
+            this._toast(`Added ${this._name(entityId)}`);
+            input.value = "";
+            this._refreshAddSelects(true);
+          }).catch((err) => {
+            this._toast(`Add failed: ${err.message || err}`, false);
+          }).finally(() => {
+            manual.disabled = false;
           });
         }
       });
@@ -1087,5 +1111,118 @@
     }
   }
 
-  customElements.define("fullstacksecurity-panel", FullStackSecurityPanel);
+  if (!customElements.get("fullstacksecurity-panel")) {
+    customElements.define("fullstacksecurity-panel", FullStackSecurityPanel);
+  }
+
+  class FullStackSecurityCard extends HTMLElement {
+    setConfig(config) {
+      this._config = config || {};
+      if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+      this._render();
+    }
+
+    set hass(hass) {
+      this._hass = hass;
+      if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+      this._render();
+    }
+
+    getCardSize() {
+      return 5;
+    }
+
+    _entityId() {
+      if (this._config?.entity && this._hass?.states[this._config.entity]) {
+        return this._config.entity;
+      }
+      const states = this._hass?.states || {};
+      if (states["alarm_control_panel.fullstack_security"]) {
+        return "alarm_control_panel.fullstack_security";
+      }
+      return Object.keys(states).find(
+        (k) => k.startsWith("alarm_control_panel.") &&
+          (k.includes("fullstack") || k.includes("full_stack"))
+      );
+    }
+
+    _name(entityId) {
+      const s = this._hass?.states?.[entityId];
+      return (s && s.attributes.friendly_name) || entityId;
+    }
+
+    _deviceState(listKey, entityId) {
+      const panel = document.createElement("fullstacksecurity-panel");
+      panel._hass = this._hass;
+      return panel._deviceState(listKey, entityId);
+    }
+
+    _render() {
+      if (!this.shadowRoot || !this._hass) return;
+      const id = this._entityId();
+      const alarm = id ? this._hass.states[id] : undefined;
+      if (!alarm) {
+        this.shadowRoot.innerHTML = `<ha-card><div class="missing">FullStack Security entity not found.</div></ha-card>`;
+        return;
+      }
+      const attrs = alarm.attributes || {};
+      const rows = [];
+      for (const [key, meta] of Object.entries(LISTS)) {
+        for (const entityId of attrs[key] || []) {
+          const st = this._deviceState(key, entityId);
+          rows.push({ key, meta, entityId, st });
+        }
+      }
+      this.shadowRoot.innerHTML = `
+        <style>
+          ha-card { overflow: hidden; }
+          .wrap { padding: 16px; }
+          .head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+          .head ha-icon { --mdc-icon-size: 28px; color: var(--primary-color); }
+          .title { flex: 1; min-width: 0; }
+          .title h2 { margin: 0; font-size: 20px; font-weight: 500; }
+          .title p { margin: 3px 0 0; color: var(--secondary-text-color); font-size: 13px; }
+          .state { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 6px 10px; text-transform: uppercase; background: var(--secondary-background-color); }
+          .row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--divider-color); }
+          .row ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); flex: none; }
+          .nm { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .eid { display: block; font-size: 11px; color: var(--secondary-text-color); overflow: hidden; text-overflow: ellipsis; }
+          .pill { font-size: 11px; font-weight: 700; letter-spacing: .4px; padding: 4px 9px; border-radius: 999px; flex: none; }
+          .safe { color: var(--success-color, #2e9e5b); background: color-mix(in srgb, var(--success-color, #2e9e5b) 14%, transparent); }
+          .alert { color: var(--error-color, #e0442c); background: color-mix(in srgb, var(--error-color, #e0442c) 14%, transparent); }
+          .warn { color: var(--warning-color, #f5a623); background: color-mix(in srgb, var(--warning-color, #f5a623) 16%, transparent); }
+          .water { color: var(--info-color, #2196f3); background: color-mix(in srgb, var(--info-color, #2196f3) 14%, transparent); }
+          .idle { color: var(--secondary-text-color); background: color-mix(in srgb, var(--secondary-text-color) 12%, transparent); }
+          .missing, .empty { padding: 18px; color: var(--secondary-text-color); }
+        </style>
+        <ha-card>
+          <div class="wrap">
+            <div class="head">
+              <ha-icon icon="mdi:shield-home"></ha-icon>
+              <div class="title">
+                <h2>${alarm.attributes.friendly_name || "FullStack Security"}</h2>
+                <p>${rows.length} configured device${rows.length === 1 ? "" : "s"}</p>
+              </div>
+              <span class="state">${String(alarm.state).replace(/_/g, " ")}</span>
+            </div>
+            ${rows.length ? rows.map((r) => `
+              <div class="row">
+                <ha-icon icon="${r.meta.icon}"></ha-icon>
+                <span class="nm">${this._name(r.entityId)}<span class="eid">${r.entityId}</span></span>
+                <span class="pill ${r.st.cls}">${r.st.text}</span>
+              </div>`).join("") : `<div class="empty">No devices configured yet. Open Security in the sidebar and add devices.</div>`}
+          </div>
+        </ha-card>`;
+    }
+  }
+
+  if (!customElements.get("fullstacksecurity-card")) {
+    customElements.define("fullstacksecurity-card", FullStackSecurityCard);
+    window.customCards = window.customCards || [];
+    window.customCards.push({
+      type: "fullstacksecurity-card",
+      name: "FullStack Security",
+      description: "Alarm status plus configured sensor, siren, light and button states.",
+    });
+  }
 })();

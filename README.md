@@ -32,6 +32,8 @@ automations to write.
   water leak, and failed arming (optionally on every arm/disarm too)
 - 🖥️ **Sidebar panel** with live sensor states, arm/disarm countdowns, device
   management and all settings — themed to match your HA light/dark theme
+- 🧩 **Dashboard card** (`custom:fullstacksecurity-card`) for normal Home
+  Assistant dashboards, showing the alarm and every configured device status
 - 🔁 Alarm state survives Home Assistant restarts
 
 The integration creates two entities you can also use in automations:
@@ -72,6 +74,26 @@ Copy `custom_components/fullstacksecurity` into your Home Assistant
 5. **Schedule** tab → optionally set auto-arm/disarm times per weekday
 6. Arm from the **Dashboard** tab or with your zigbee button, and keep an eye
    on batteries in the **Health** tab
+
+## Home Assistant dashboard card
+
+The standard Home Assistant alarm card only shows the alarm entity. To show all
+FullStack Security sensors and their live status on a normal dashboard:
+
+1. Restart Home Assistant after installing/updating the integration
+2. Edit your dashboard → **Add card** → **Manual**
+3. Paste:
+
+```yaml
+type: custom:fullstacksecurity-card
+```
+
+If you renamed the alarm entity, include it:
+
+```yaml
+type: custom:fullstacksecurity-card
+entity: alarm_control_panel.fullstack_security
+```
 
 ## How it behaves
 

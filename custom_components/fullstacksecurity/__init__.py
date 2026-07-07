@@ -9,6 +9,12 @@ from homeassistant.components.frontend import (
     async_register_built_in_panel,
     async_remove_panel,
 )
+try:
+    from homeassistant.components.frontend import (
+        async_register_frontend_extra_module_url,
+    )
+except ImportError:  # pragma: no cover - older HA versions can still use the sidebar panel
+    async_register_frontend_extra_module_url = None
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -51,6 +57,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             ]
         )
         data["static_registered"] = True
+
+    if async_register_frontend_extra_module_url and not data.get(
+        "frontend_module_registered"
+    ):
+        async_register_frontend_extra_module_url(hass, PANEL_JS_URL)
+        data["frontend_module_registered"] = True
 
     async_register_built_in_panel(
         hass,
