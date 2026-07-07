@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel/card (v2.6.0) */
+/* FullStack Security - sidebar panel/card (v2.6.1) */
 (() => {
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },
@@ -1142,7 +1142,7 @@
       const set = (id, v) => { const el = this.$(id); if (el) el.value = v; };
       set("#f-arming_delay", a.arming_delay ?? 30);
       set("#f-entry_delay", a.entry_delay ?? 30);
-      set("#f-siren_duration", a.siren_duration ?? 300);
+      set("#f-siren_duration", a.siren_duration ?? 0);
       set("#f-siren_volume", a.siren_volume ?? 100);
       this.$("#volume-label").textContent = `${a.siren_volume ?? 100}%`;
       set("#f-light_mode", a.light_mode || "flash_long");

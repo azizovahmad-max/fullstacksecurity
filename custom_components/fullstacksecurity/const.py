@@ -1,7 +1,7 @@
 """Constants for the FullStack Security integration."""
 
 DOMAIN = "fullstacksecurity"
-VERSION = "2.6.0"
+VERSION = "2.6.1"
 
 PANEL_URL_PATH = "fullstacksecurity"
 PANEL_NAME = "fullstacksecurity-panel"
@@ -85,7 +85,7 @@ DEFAULTS = {
     CONF_MQTT_BUTTONS: [],
     CONF_ARMING_DELAY: 30,
     CONF_ENTRY_DELAY: 30,
-    CONF_SIREN_DURATION: 300,
+    CONF_SIREN_DURATION: 0,
     CONF_SIREN_TONE: "",
     CONF_SIREN_VOLUME: 100,
     CONF_LIGHT_MODE: "flash_long",
