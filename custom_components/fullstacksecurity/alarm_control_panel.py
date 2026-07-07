@@ -18,6 +18,7 @@ from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
     async_track_time_change,
+    async_track_time_interval,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
@@ -63,6 +64,11 @@ RESTORABLE_STATES = {
 }
 
 MAX_HISTORY = 25
+
+# Many zigbee sirens auto-stop after their own internal duration no matter
+# what we ask for, so while the alarm is triggered we re-send turn_on on this
+# interval to keep them sounding.
+SIREN_REFRESH_SECONDS = 3
 
 
 async def async_setup_entry(
@@ -147,6 +153,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._delay_total = 0
         self._last_triggered_by: str | None = None
         self._timer_cancel = None
+        self._siren_loop_cancel = None
         self._history: list[dict] = []
 
     # ------------------------------------------------------------------ setup
@@ -184,6 +191,47 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
 
     async def async_will_remove_from_hass(self) -> None:
         self._cancel_timer()
+        self._stop_siren_loop()
+
+    def _stop_siren_loop(self) -> None:
+        if self._siren_loop_cancel:
+            self._siren_loop_cancel()
+            self._siren_loop_cancel = None
+
+    def _start_siren_loop(self) -> None:
+        """Keep the sirens sounding until duration elapses or we disarm.
+
+        Zigbee sirens usually have their own internal auto-off, so a single
+        turn_on is not enough - re-send it periodically.
+        """
+        self._stop_siren_loop()
+        if not self._sirens:
+            return
+        until = (
+            None
+            if self._siren_duration <= 0
+            else dt_util.utcnow() + timedelta(seconds=self._siren_duration)
+        )
+
+        @callback
+        def _refresh(_now) -> None:
+            if self._attr_alarm_state != AlarmControlPanelState.TRIGGERED:
+                self._stop_siren_loop()
+                return
+            if until and dt_util.utcnow() >= until:
+                self._stop_siren_loop()
+                self.hass.async_create_task(async_sirens_off(self.hass, self._sirens))
+                return
+            self.hass.async_create_task(
+                async_sirens_on(
+                    self.hass, self._sirens, self._siren_tone,
+                    self._siren_duration, self._siren_volume,
+                )
+            )
+
+        self._siren_loop_cancel = async_track_time_interval(
+            self.hass, _refresh, timedelta(seconds=SIREN_REFRESH_SECONDS)
+        )
 
     def _cancel_timer(self) -> None:
         if self._timer_cancel:
@@ -209,23 +257,31 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
 
     # ------------------------------------------------------------- readiness
 
-    def _blocking_sensors(self) -> tuple[list[str], list[str]]:
-        """Return (open, dead) security sensors that prevent arming."""
+    def _blocking_sensors(self) -> tuple[list[str], list[str], list[str]]:
+        """Return (open, dead, nodata) security sensors.
+
+        Open and dead block arming. "unknown" (nodata) just means no report
+        since the last restart - normal for zigbee2mqtt sensors without
+        retained MQTT messages - so it is surfaced but does not block.
+        """
         open_sensors: list[str] = []
         dead_sensors: list[str] = []
+        nodata_sensors: list[str] = []
         for entity_id in self._doors + self._vibration:
             state = self.hass.states.get(entity_id)
-            if state is None or state.state in ("unavailable", "unknown"):
+            if state is None or state.state == "unavailable":
                 dead_sensors.append(entity_id)
+            elif state.state == "unknown":
+                nodata_sensors.append(entity_id)
             elif state.state == STATE_ON:
                 open_sensors.append(entity_id)
-        return open_sensors, dead_sensors
+        return open_sensors, dead_sensors, nodata_sensors
 
     # ------------------------------------------------------------- attributes
 
     @property
     def extra_state_attributes(self):
-        open_sensors, dead_sensors = self._blocking_sensors()
+        open_sensors, dead_sensors, nodata_sensors = self._blocking_sensors()
         return {
             "doors": self._doors,
             "vibration": self._vibration,
@@ -253,6 +309,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             "schedules": self._schedules,
             "open_sensors": open_sensors,
             "unavailable_sensors": dead_sensors,
+            "nodata_sensors": nodata_sensors,
             "delay_ends_at": self._delay_ends_at.isoformat() if self._delay_ends_at else None,
             "delay_total": self._delay_total,
             "last_triggered_by": self._last_triggered_by,
@@ -292,11 +349,16 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
 
     @callback
     def _handle_button(self, new_state) -> None:
-        if new_state.domain == "event" or new_state.entity_id.startswith("event."):
+        domain = new_state.entity_id.split(".", 1)[0]
+        if domain in ("button", "input_button"):
+            raw = new_state.state
+            press = "single"
+        elif domain == "event":
             raw = new_state.attributes.get("event_type", "")
+            press = _classify_button_press(str(raw))
         else:
             raw = new_state.state
-        press = _classify_button_press(str(raw))
+            press = _classify_button_press(str(raw))
         if press is None:
             return
         action = self._button_actions.get(press, "none")
@@ -363,7 +425,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         ):
             return
 
-        open_sensors, dead_sensors = self._blocking_sensors()
+        open_sensors, dead_sensors, _nodata = self._blocking_sensors()
         if open_sensors or dead_sensors:
             parts = []
             if open_sensors:
@@ -440,6 +502,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
     async def async_alarm_disarm(self, code=None, auto: bool = False) -> None:
         was = self._attr_alarm_state
         self._cancel_timer()
+        self._stop_siren_loop()
         self._attr_alarm_state = AlarmControlPanelState.DISARMED
         self._last_triggered_by = None
         if was != AlarmControlPanelState.DISARMED:
@@ -514,15 +577,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             self.hass, self._sirens, self._siren_tone, self._siren_duration,
             self._siren_volume,
         )
-
-        if self._siren_duration > 0 and self._sirens:
-
-            @callback
-            def _siren_timeout(_now) -> None:
-                if self._attr_alarm_state == AlarmControlPanelState.TRIGGERED:
-                    self.hass.async_create_task(async_sirens_off(self.hass, self._sirens))
-
-            async_call_later(self.hass, self._siren_duration, _siren_timeout)
+        self._start_siren_loop()
 
         if self._lights:
             data: dict = {ATTR_ENTITY_ID: self._lights}

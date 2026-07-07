@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel (v2.1.0) */
+/* FullStack Security - sidebar panel (v2.4.0) */
 (() => {
   if (customElements.get("fullstacksecurity-panel")) return;
 
@@ -35,6 +35,11 @@
     "arming_delay", "entry_delay", "siren_duration", "siren_tone",
     "light_mode", "light_duration", "button_single", "button_double",
     "button_triple", "button_hold",
+  ];
+  const CONFIG_ATTRS = [
+    ...Object.keys(LISTS), ...SETTINGS_FIELDS, "siren_volume",
+    "armed_light_color", "flood_siren", "notify_services",
+    "notify_arm_disarm", "schedules_enabled", "schedules",
   ];
 
   class FullStackSecurityPanel extends HTMLElement {
@@ -122,11 +127,20 @@
           case "armed_lights":
             ok = domain === "light";
             break;
-          case "buttons":
-            ok = domain === "event" ||
-              ((domain === "sensor" || domain === "binary_sensor") &&
-                /action|button|scene|click/.test(hay));
+          case "buttons": {
+            const diagnostic =
+              /_battery|_linkquality|_voltage|_temperature|_humidity|_power|_energy|_update|_identify|_illuminance|backup/.test(id) ||
+              ["battery", "voltage", "temperature", "humidity", "signal_strength",
+                "power", "energy", "illuminance", "timestamp"].includes(dc);
+            if (diagnostic) break;
+            const buttonLike =
+              dc === "button" ||
+              /(^|[_.\s-])(action|button|click|cube|dial|keypad|remote|scene|switch|toggle|wallmote)([_.\s-]|$)/.test(hay);
+            ok = this._showAllButtons
+              ? ["event", "sensor", "binary_sensor", "button", "input_button"].includes(domain)
+              : (["event", "sensor", "binary_sensor", "button", "input_button"].includes(domain) && buttonLike);
             break;
+          }
         }
         if (ok) out.push(id);
       }
@@ -143,10 +157,16 @@
 
     _deviceState(listKey, entityId) {
       const s = this._hass.states[entityId];
-      if (!s || s.state === "unavailable" || s.state === "unknown") {
+      if (!s || s.state === "unavailable") {
         // A dead security/flood sensor is a real problem, not a neutral state.
         const critical = ["doors", "vibration", "flood"].includes(listKey);
         return { text: "OFFLINE", cls: critical ? "alert static" : "idle" };
+      }
+      if (s.state === "unknown" || s.state === "") {
+        // No report since restart - normal for z2m sensors without retain.
+        return listKey === "buttons"
+          ? { text: "READY", cls: "idle" }
+          : { text: "NO DATA", cls: "warn" };
       }
       const on = s.state === "on";
       switch (listKey) {
@@ -310,7 +330,13 @@
           padding: 6px 12px; border-radius: 99px; font-size: 12px; font-weight: 700;
           color: var(--fss-red); background: color-mix(in srgb, var(--fss-red) 13%, transparent);
         }
+        .ready-chip.good { color: var(--fss-green); background: color-mix(in srgb, var(--fss-green) 13%, transparent); }
+        .ready-chip.warn { color: var(--fss-amber); background: color-mix(in srgb, var(--fss-amber) 15%, transparent); }
         .ready-chip ha-icon { --mdc-icon-size: 15px; color: inherit; }
+        .group-label {
+          font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+          color: var(--secondary-text-color); padding: 12px 4px 2px;
+        }
         .st-disarmed { --st-color: var(--fss-green); }
         .st-arming { --st-color: var(--fss-amber); }
         .st-pending { --st-color: var(--fss-amber); }
@@ -492,6 +518,17 @@
                 <select data-addsel="${key}"><option value="">Select an entity…</option></select>
                 <button data-addbtn="${key}">ADD</button>
               </div>
+              ${key === "buttons" ? `
+              <label class="checkline" style="margin-top:8px;">
+                <input type="checkbox" id="btn-showall"> My button isn't listed — show every entity
+              </label>
+              <p class="hint" style="margin:6px 0 0;">
+                zigbee2mqtt buttons need an entity for their presses. If nothing
+                shows up even with the box above ticked, open the z2m frontend
+                &rarr; Settings &rarr; Home Assistant integration and enable the
+                legacy action sensor (or update z2m so it creates event
+                entities), then restart z2m.
+              </p>` : ""}
             </section>`).join("")}
         </div>
 
@@ -641,12 +678,25 @@
           const key = add.dataset.addbtn;
           const sel = this.$(`[data-addsel="${key}"]`);
           if (!sel.value) return this._toast("Pick an entity first", false);
+          const entityId = sel.value;
+          add.disabled = true;
           this._hass.callService("fullstacksecurity", "update_config", {
             action: "add", type: key, entity_id: sel.value,
+          }).then(() => {
+            this._toast(`Added ${this._name(entityId)}`);
+            sel.value = "";
+            this._refreshAddSelects(true);
+          }).catch((err) => {
+            this._toast(`Add failed: ${err.message || err}`, false);
+          }).finally(() => {
+            add.disabled = false;
           });
-          this._toast(`Added ${this._name(sel.value)}`);
-          sel.value = "";
         }
+      });
+
+      this.$("#btn-showall").addEventListener("change", (e) => {
+        this._showAllButtons = e.target.checked;
+        this._refreshAddSelects(true);
       });
 
       const markDirty = () => { this._dirty = true; };
@@ -754,7 +804,7 @@
       this._renderSensorGrid();
       this._renderHistory();
 
-      const sig = JSON.stringify(Object.keys(LISTS).map((k) => this._configured(k)));
+      const sig = JSON.stringify(CONFIG_ATTRS.map((k) => this._attrs()[k]));
       const cfgChanged = sig !== this._configSig;
       this._configSig = sig;
 
@@ -780,25 +830,34 @@
       const secCount = (a.doors || []).length + (a.vibration || []).length;
       const open = a.open_sensors || [];
       const dead = a.unavailable_sensors || [];
-      const blocked = alarm.state === "disarmed" && (open.length > 0 || dead.length > 0);
+      const nodata = a.nodata_sensors || [];
+      const blocked = open.length > 0 || dead.length > 0;
 
-      // Pre-arm readiness: list every blocker and disable the arm button.
+      // Pre-arm readiness: always visible while disarmed. Open/offline
+      // sensors block arming; no-data sensors are surfaced but don't block.
       const readyBox = this.$("#ready-box");
-      readyBox.hidden = !blocked;
-      if (blocked) {
-        readyBox.innerHTML =
-          open.map((e) => `
-            <span class="ready-chip"><ha-icon icon="mdi:door-open"></ha-icon>${this._name(e)} — OPEN</span>`).join("") +
-          dead.map((e) => `
-            <span class="ready-chip"><ha-icon icon="mdi:lan-disconnect"></ha-icon>${this._name(e)} — OFFLINE</span>`).join("");
+      readyBox.hidden = alarm.state !== "disarmed";
+      if (!readyBox.hidden) {
+        if (!blocked && nodata.length === 0) {
+          readyBox.innerHTML = `
+            <span class="ready-chip good"><ha-icon icon="mdi:check-circle"></ha-icon>All ${secCount} sensor${secCount === 1 ? "" : "s"} ready</span>`;
+        } else {
+          readyBox.innerHTML =
+            open.map((e) => `
+              <span class="ready-chip"><ha-icon icon="mdi:door-open"></ha-icon>${this._name(e)} — OPEN</span>`).join("") +
+            dead.map((e) => `
+              <span class="ready-chip"><ha-icon icon="mdi:lan-disconnect"></ha-icon>${this._name(e)} — OFFLINE</span>`).join("") +
+            nodata.map((e) => `
+              <span class="ready-chip warn"><ha-icon icon="mdi:help-circle-outline"></ha-icon>${this._name(e)} — NO DATA</span>`).join("");
+        }
       }
-      this.$("#main-btn").disabled = blocked;
+      this.$("#main-btn").disabled = alarm.state === "disarmed" && blocked;
 
       let sub = "";
       if (alarm.state === "disarmed") {
         sub = blocked
           ? "Not ready to arm — fix the sensors below first"
-          : `Ready to arm — ${secCount} sensor${secCount === 1 ? "" : "s"} OK`;
+          : `Ready to arm — ${secCount} sensor${secCount === 1 ? "" : "s"} configured`;
         if (a.schedules_enabled) sub += " · schedule on";
       } else if (alarm.state === "armed_away") {
         sub = `Monitoring ${secCount} sensor${secCount === 1 ? "" : "s"}`;
@@ -873,11 +932,14 @@
     _renderSensorGrid() {
       const grid = this.$("#sensor-grid");
       let html = "";
-      for (const key of ["doors", "vibration", "flood"]) {
-        html += this._configured(key).map((e) => this._rowHtml(key, e, false)).join("");
+      for (const key of Object.keys(LISTS)) {
+        const items = this._configured(key);
+        if (!items.length) continue;
+        html += `<div class="group-label">${LISTS[key].title}</div>`;
+        html += items.map((e) => this._rowHtml(key, e, false)).join("");
       }
       grid.innerHTML = html ||
-        `<div class="empty">No sensors yet — add door, vibration and flood sensors in the Devices tab.</div>`;
+        `<div class="empty">No devices yet — add your sensors, sirens and buttons in the Devices tab.</div>`;
     }
 
     _renderHistory() {
