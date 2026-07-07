@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel (v2.4.0) */
+/* FullStack Security - sidebar panel (v2.4.1) */
 (() => {
   if (customElements.get("fullstacksecurity-panel")) return;
 
@@ -133,12 +133,7 @@
               ["battery", "voltage", "temperature", "humidity", "signal_strength",
                 "power", "energy", "illuminance", "timestamp"].includes(dc);
             if (diagnostic) break;
-            const buttonLike =
-              dc === "button" ||
-              /(^|[_.\s-])(action|button|click|cube|dial|keypad|remote|scene|switch|toggle|wallmote)([_.\s-]|$)/.test(hay);
-            ok = this._showAllButtons
-              ? ["event", "sensor", "binary_sensor", "button", "input_button"].includes(domain)
-              : (["event", "sensor", "binary_sensor", "button", "input_button"].includes(domain) && buttonLike);
+            ok = ["event", "sensor", "binary_sensor", "button", "input_button"].includes(domain);
             break;
           }
         }
@@ -518,17 +513,6 @@
                 <select data-addsel="${key}"><option value="">Select an entity…</option></select>
                 <button data-addbtn="${key}">ADD</button>
               </div>
-              ${key === "buttons" ? `
-              <label class="checkline" style="margin-top:8px;">
-                <input type="checkbox" id="btn-showall"> My button isn't listed — show every entity
-              </label>
-              <p class="hint" style="margin:6px 0 0;">
-                zigbee2mqtt buttons need an entity for their presses. If nothing
-                shows up even with the box above ticked, open the z2m frontend
-                &rarr; Settings &rarr; Home Assistant integration and enable the
-                legacy action sensor (or update z2m so it creates event
-                entities), then restart z2m.
-              </p>` : ""}
             </section>`).join("")}
         </div>
 
@@ -692,11 +676,6 @@
             add.disabled = false;
           });
         }
-      });
-
-      this.$("#btn-showall").addEventListener("change", (e) => {
-        this._showAllButtons = e.target.checked;
-        this._refreshAddSelects(true);
       });
 
       const markDirty = () => { this._dirty = true; };
