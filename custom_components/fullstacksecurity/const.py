@@ -1,7 +1,7 @@
 """Constants for the FullStack Security integration."""
 
 DOMAIN = "fullstacksecurity"
-VERSION = "2.9.1"
+VERSION = "2.9.2"
 
 PANEL_URL_PATH = "fullstacksecurity"
 PANEL_NAME = "fullstacksecurity-panel"
@@ -55,6 +55,7 @@ CONF_BUTTON_HOLD = "button_hold"
 CONF_SCHEDULES_ENABLED = "schedules_enabled"
 CONF_SCHEDULES = "schedules"
 CONF_HEALTH_CHECK_ENABLED = "health_check_enabled"
+CONF_HEALTH_CHECK_DAYS = "health_check_days"
 CONF_HEALTH_CHECK_TIMES = "health_check_times"
 CONF_HEALTH_BATTERY_THRESHOLD = "health_battery_threshold"
 
@@ -80,6 +81,7 @@ SETTINGS_KEYS = (
     CONF_SCHEDULES_ENABLED,
     CONF_SCHEDULES,
     CONF_HEALTH_CHECK_ENABLED,
+    CONF_HEALTH_CHECK_DAYS,
     CONF_HEALTH_CHECK_TIMES,
     CONF_HEALTH_BATTERY_THRESHOLD,
 )
@@ -116,6 +118,7 @@ DEFAULTS = {
     CONF_SCHEDULES_ENABLED: False,
     CONF_SCHEDULES: {},
     CONF_HEALTH_CHECK_ENABLED: False,
+    CONF_HEALTH_CHECK_DAYS: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
     CONF_HEALTH_CHECK_TIMES: ["09:00"],
     CONF_HEALTH_BATTERY_THRESHOLD: 20,
 }

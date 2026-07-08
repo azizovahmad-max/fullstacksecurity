@@ -43,6 +43,7 @@ from .const import (
     CONF_FLOOD_SIREN,
     CONF_HEALTH_BATTERY_THRESHOLD,
     CONF_HEALTH_CHECK_ENABLED,
+    CONF_HEALTH_CHECK_DAYS,
     CONF_HEALTH_CHECK_TIMES,
     CONF_LIGHT_DURATION,
     CONF_LIGHT_MODE,
@@ -168,9 +169,9 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         schedules = opt(options, CONF_SCHEDULES)
         self._schedules: dict = schedules if isinstance(schedules, dict) else {}
         self._health_check_enabled = bool(opt(options, CONF_HEALTH_CHECK_ENABLED))
-        times = opt(options, CONF_HEALTH_CHECK_TIMES)
+        self._health_check_days: list[str] = list(opt(options, CONF_HEALTH_CHECK_DAYS))
         self._health_check_times: list[str] = [
-            t for t in (times if isinstance(times, list) else []) if t
+            t for t in (opt(options, CONF_HEALTH_CHECK_TIMES) or []) if isinstance(t, str) and t
         ]
         self._health_battery_threshold = int(opt(options, CONF_HEALTH_BATTERY_THRESHOLD))
 
@@ -460,6 +461,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             "schedules_enabled": self._schedules_enabled,
             "schedules": self._schedules,
             "health_check_enabled": self._health_check_enabled,
+            "health_check_days": self._health_check_days,
             "health_check_times": self._health_check_times,
             "health_battery_threshold": self._health_battery_threshold,
             "open_sensors": open_sensors,
@@ -541,8 +543,9 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         """Once-a-minute driver for the schedule and the health check."""
         local = dt_util.as_local(now)
         hhmm = local.strftime("%H:%M")
+        today_str = WEEKDAYS[local.weekday()]
         self._schedule_tick(local, hhmm)
-        if self._health_check_enabled and hhmm in self._health_check_times:
+        if self._health_check_enabled and today_str in self._health_check_days and hhmm in self._health_check_times:
             self.hass.async_create_task(self._async_run_health_check())
 
     @callback

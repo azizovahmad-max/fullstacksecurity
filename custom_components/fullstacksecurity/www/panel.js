@@ -703,6 +703,18 @@
               <div class="field"><label>Check time 2 (optional)</label><input type="time" id="f-health_time2"></div>
             </div>
             <div class="field" style="margin-top:14px;">
+              <label>Schedule Days</label>
+              <div class="days-grid" id="f-health_days" style="display:flex; gap:10px; margin-top:6px; flex-wrap:wrap;">
+                <label><input type="checkbox" value="mon"> Mon</label>
+                <label><input type="checkbox" value="tue"> Tue</label>
+                <label><input type="checkbox" value="wed"> Wed</label>
+                <label><input type="checkbox" value="thu"> Thu</label>
+                <label><input type="checkbox" value="fri"> Fri</label>
+                <label><input type="checkbox" value="sat"> Sat</label>
+                <label><input type="checkbox" value="sun"> Sun</label>
+              </div>
+            </div>
+            <div class="field" style="margin-top:14px;">
               <label>Low battery warning below (%)</label>
               <input type="number" min="1" max="100" id="f-health_battery_threshold" value="20">
             </div>
@@ -885,6 +897,7 @@
       data.notify_arm_disarm = this.$("#f-notify_arm_disarm").checked;
       data.notify_services = this.$$("#notify-list input:checked").map((c) => c.value);
       data.health_check_enabled = this.$("#f-health_check_enabled").checked;
+      data.health_check_days = this.$$("#f-health_days input:checked").map((c) => c.value);
       data.health_check_times = [
         this.$("#f-health_time1").value,
         this.$("#f-health_time2").value,
@@ -1234,6 +1247,10 @@
       set("#f-health_time1", times[0] || "09:00");
       set("#f-health_time2", times[1] || "");
       set("#f-health_battery_threshold", a.health_battery_threshold ?? 20);
+      const days = Array.isArray(a.health_check_days) ? a.health_check_days : ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+      this.$$("#f-health_days input[type=checkbox]").forEach(cb => {
+          cb.checked = days.includes(cb.value);
+      });
 
       // Siren tones from the configured sirens.
       const tones = new Set();
