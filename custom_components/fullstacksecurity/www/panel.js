@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel/card (v2.8.0) */
+/* FullStack Security - sidebar panel/card (v2.9.0) */
 (() => {
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },
@@ -39,6 +39,7 @@
     "armed_light_color", "disarmed_light_color", "disarmed_lights_on",
     "arming_flash", "flood_siren", "notify_services",
     "notify_arm_disarm", "schedules_enabled", "schedules",
+    "health_check_enabled", "health_check_times", "health_battery_threshold",
   ];
 
   class FullStackSecurityPanel extends HTMLElement {
@@ -400,6 +401,13 @@
         }
         .addrow button:hover { filter: brightness(1.1); }
         .addrow input { flex: 1; }
+        .add-btn {
+          width: 100%; padding: 12px; border: 1px solid var(--fss-border);
+          border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px;
+          font-weight: 700; letter-spacing: .3px;
+          color: var(--primary-color); background: transparent;
+        }
+        .add-btn:hover { background: color-mix(in srgb, var(--primary-color) 10%, transparent); }
         .mqtt-block {
           margin-top: 16px; padding: 14px; border-radius: 10px;
           border: 1px solid var(--fss-border);
@@ -679,6 +687,23 @@
             </label>
           </section>
 
+          <section class="card">
+            <h2><ha-icon icon="mdi:heart-pulse"></ha-icon> Device health alerts</h2>
+            <p class="hint">Automatically checks every device for low battery or offline status at the times below and notifies the phones ticked above so you can fix issues in time.</p>
+            <label class="checkline" style="margin-bottom:6px;">
+              <input type="checkbox" id="f-health_check_enabled"> Enable automatic health checks
+            </label>
+            <div class="grid2">
+              <div class="field"><label>Check time 1</label><input type="time" id="f-health_time1" value="09:00"></div>
+              <div class="field"><label>Check time 2 (optional)</label><input type="time" id="f-health_time2"></div>
+            </div>
+            <div class="field" style="margin-top:14px;">
+              <label>Low battery warning below (%)</label>
+              <input type="number" min="1" max="100" id="f-health_battery_threshold" value="20">
+            </div>
+            <button id="health-test-btn" class="add-btn" style="margin-top:14px;">Send a test health report now</button>
+          </section>
+
           <button id="save-btn" class="save-btn">SAVE SETTINGS</button>
         </div>
       </main>
@@ -789,6 +814,14 @@
       this.$("#view-settings").addEventListener("input", markDirty);
       this.$("#save-btn").addEventListener("click", () => this._saveSettings());
 
+      this.$("#health-test-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        this._hass.callService("fullstacksecurity", "update_config", {
+          action: "health_check",
+        });
+        this._toast("Test health report sent to your phone(s)");
+      });
+
       this.$("#f-siren_volume").addEventListener("input", (e) => {
         this.$("#volume-label").textContent = `${e.target.value}%`;
       });
@@ -846,6 +879,13 @@
       data.flood_siren = this.$("#f-flood_siren").checked;
       data.notify_arm_disarm = this.$("#f-notify_arm_disarm").checked;
       data.notify_services = this.$$("#notify-list input:checked").map((c) => c.value);
+      data.health_check_enabled = this.$("#f-health_check_enabled").checked;
+      data.health_check_times = [
+        this.$("#f-health_time1").value,
+        this.$("#f-health_time2").value,
+      ].filter(Boolean);
+      data.health_battery_threshold = Math.min(100, Math.max(1,
+        parseInt(this.$("#f-health_battery_threshold").value, 10) || 20));
 
       this._hass
         .callService("fullstacksecurity", "update_config", data)
@@ -1183,6 +1223,12 @@
       set("#f-button_hold", a.button_hold || "none");
       this.$("#f-flood_siren").checked = a.flood_siren !== false;
       this.$("#f-notify_arm_disarm").checked = a.notify_arm_disarm === true;
+
+      const times = Array.isArray(a.health_check_times) ? a.health_check_times : [];
+      this.$("#f-health_check_enabled").checked = a.health_check_enabled === true;
+      set("#f-health_time1", times[0] || "09:00");
+      set("#f-health_time2", times[1] || "");
+      set("#f-health_battery_threshold", a.health_battery_threshold ?? 20);
 
       // Siren tones from the configured sirens.
       const tones = new Set();

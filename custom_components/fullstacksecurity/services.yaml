@@ -6,7 +6,7 @@ update_config:
   fields:
     action:
       name: Action
-      description: One of add, remove or settings.
+      description: One of add, remove, settings or health_check.
       required: true
       example: add
       selector:
@@ -15,6 +15,7 @@ update_config:
             - add
             - remove
             - settings
+            - health_check
     type:
       name: List
       description: Which entity list to modify (for add/remove).

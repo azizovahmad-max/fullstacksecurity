@@ -41,6 +41,9 @@ from .const import (
     CONF_ENTRY_DELAY,
     CONF_FLOOD,
     CONF_FLOOD_SIREN,
+    CONF_HEALTH_BATTERY_THRESHOLD,
+    CONF_HEALTH_CHECK_ENABLED,
+    CONF_HEALTH_CHECK_TIMES,
     CONF_LIGHT_DURATION,
     CONF_LIGHT_MODE,
     CONF_LIGHTS,
@@ -54,6 +57,7 @@ from .const import (
     CONF_VIBRATION,
     DOMAIN,
     EVENT_FLOOD,
+    EVENT_RUN_HEALTH_CHECK,
     EVENT_TRIGGERED,
     WEEKDAYS,
     get_notify_services,
@@ -160,6 +164,12 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._schedules_enabled = bool(opt(options, CONF_SCHEDULES_ENABLED))
         schedules = opt(options, CONF_SCHEDULES)
         self._schedules: dict = schedules if isinstance(schedules, dict) else {}
+        self._health_check_enabled = bool(opt(options, CONF_HEALTH_CHECK_ENABLED))
+        times = opt(options, CONF_HEALTH_CHECK_TIMES)
+        self._health_check_times: list[str] = [
+            t for t in (times if isinstance(times, list) else []) if t
+        ]
+        self._health_battery_threshold = int(opt(options, CONF_HEALTH_BATTERY_THRESHOLD))
 
         self._delay_ends_at = None
         self._delay_total = 0
@@ -206,9 +216,14 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             self.hass.bus.async_listen(EVENT_FLOOD, self._flood_event)
         )
 
-        # Minute tick for the auto-arm schedule.
+        # Manual "run health check now" trigger from the panel.
         self.async_on_remove(
-            async_track_time_change(self.hass, self._schedule_tick, second=0)
+            self.hass.bus.async_listen(EVENT_RUN_HEALTH_CHECK, self._health_check_event)
+        )
+
+        # Minute tick drives the auto-arm schedule and the health check.
+        self.async_on_remove(
+            async_track_time_change(self.hass, self._minute_tick, second=0)
         )
 
         # Subscribe to zigbee2mqtt button topics directly. Many z2m buttons
@@ -436,6 +451,9 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             "button_hold": self._button_actions["hold"],
             "schedules_enabled": self._schedules_enabled,
             "schedules": self._schedules,
+            "health_check_enabled": self._health_check_enabled,
+            "health_check_times": self._health_check_times,
+            "health_battery_threshold": self._health_battery_threshold,
             "open_sensors": open_sensors,
             "unavailable_sensors": dead_sensors,
             "nodata_sensors": nodata_sensors,
@@ -511,12 +529,19 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
     # --------------------------------------------------------------- schedule
 
     @callback
-    def _schedule_tick(self, now) -> None:
+    def _minute_tick(self, now) -> None:
+        """Once-a-minute driver for the schedule and the health check."""
+        local = dt_util.as_local(now)
+        hhmm = local.strftime("%H:%M")
+        self._schedule_tick(local, hhmm)
+        if self._health_check_enabled and hhmm in self._health_check_times:
+            self.hass.async_create_task(self._async_run_health_check())
+
+    @callback
+    def _schedule_tick(self, local, hhmm: str) -> None:
         """Check the weekly schedule once a minute (local time)."""
         if not self._schedules_enabled or not self._schedules:
             return
-        local = dt_util.as_local(now)
-        hhmm = local.strftime("%H:%M")
         today = WEEKDAYS[local.weekday()]
         yesterday = WEEKDAYS[(local.weekday() - 1) % 7]
 
@@ -549,6 +574,103 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         ):
             self._log("clock", "Auto-disarmed by schedule")
             self.hass.async_create_task(self.async_alarm_disarm(auto=True))
+
+    # ----------------------------------------------------------- health check
+
+    def _all_configured_entities(self) -> list[str]:
+        """Every real entity across all device lists, de-duplicated, order kept."""
+        seen: set[str] = set()
+        out: list[str] = []
+        for e in (
+            self._doors + self._vibration + self._flood + self._sirens
+            + self._lights + self._armed_lights + self._buttons
+        ):
+            if e not in seen:
+                seen.add(e)
+                out.append(e)
+        return out
+
+    def _battery_for(self, entity_id: str) -> float | None:
+        """Battery % from the entity's own attribute or a sibling _battery sensor."""
+        state = self.hass.states.get(entity_id)
+        if state:
+            for key in ("battery", "battery_level"):
+                value = state.attributes.get(key)
+                if isinstance(value, (int, float)):
+                    return float(value)
+        obj = entity_id.split(".", 1)[1] if "." in entity_id else entity_id
+        bases = {obj}
+        for suffix in (
+            "_contact", "_action", "_vibration", "_occupancy", "_water_leak",
+            "_moisture", "_state", "_opening", "_button",
+        ):
+            if obj.endswith(suffix):
+                bases.add(obj[: -len(suffix)])
+        for base in bases:
+            batt = self.hass.states.get(f"sensor.{base}_battery")
+            if batt is not None:
+                try:
+                    return float(batt.state)
+                except (ValueError, TypeError):
+                    continue
+        return None
+
+    @callback
+    def _health_check_event(self, event) -> None:
+        self.hass.async_create_task(self._async_run_health_check(force=True))
+
+    async def _async_run_health_check(self, force: bool = False) -> None:
+        """Scan every device for offline/low-battery and notify if any found.
+
+        force=True (manual "test now") also sends an all-clear so the user can
+        confirm notifications are wired up.
+        """
+        offline: list[str] = []
+        low: list[tuple[str, float]] = []
+        for entity_id in self._all_configured_entities():
+            state = self.hass.states.get(entity_id)
+            if state is None or state.state == "unavailable":
+                offline.append(entity_id)
+                continue
+            battery = self._battery_for(entity_id)
+            if battery is not None and battery < self._health_battery_threshold:
+                low.append((entity_id, battery))
+
+        if not offline and not low:
+            _LOGGER.debug("Health check passed: all devices OK")
+            if force:
+                count = len(self._all_configured_entities())
+                await async_notify_all(
+                    self.hass,
+                    self._notify_services,
+                    "✅ Security device health",
+                    f"All {count} device{'s' if count != 1 else ''} healthy.",
+                )
+            return
+
+        parts: list[str] = []
+        if offline:
+            parts.append(
+                "Offline: "
+                + ", ".join(friendly_name(self.hass, e) for e in offline)
+            )
+        if low:
+            parts.append(
+                "Low battery: "
+                + ", ".join(
+                    f"{friendly_name(self.hass, e)} ({b:.0f}%)" for e, b in low
+                )
+            )
+        message = " | ".join(parts)
+        _LOGGER.warning("Health check found problems: %s", message)
+        self._log("alert", f"Health check: {message}")
+        self.async_write_ha_state()
+        await async_notify_all(
+            self.hass,
+            self._notify_services,
+            "⚠️ Security device health",
+            message,
+        )
 
     # ------------------------------------------------------------ arm/disarm
 

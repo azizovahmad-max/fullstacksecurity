@@ -1,7 +1,7 @@
 """Constants for the FullStack Security integration."""
 
 DOMAIN = "fullstacksecurity"
-VERSION = "2.8.0"
+VERSION = "2.9.0"
 
 PANEL_URL_PATH = "fullstacksecurity"
 PANEL_NAME = "fullstacksecurity-panel"
@@ -54,6 +54,9 @@ CONF_BUTTON_TRIPLE = "button_triple"
 CONF_BUTTON_HOLD = "button_hold"
 CONF_SCHEDULES_ENABLED = "schedules_enabled"
 CONF_SCHEDULES = "schedules"
+CONF_HEALTH_CHECK_ENABLED = "health_check_enabled"
+CONF_HEALTH_CHECK_TIMES = "health_check_times"
+CONF_HEALTH_BATTERY_THRESHOLD = "health_battery_threshold"
 
 SETTINGS_KEYS = (
     CONF_ARMING_DELAY,
@@ -76,6 +79,9 @@ SETTINGS_KEYS = (
     CONF_BUTTON_HOLD,
     CONF_SCHEDULES_ENABLED,
     CONF_SCHEDULES,
+    CONF_HEALTH_CHECK_ENABLED,
+    CONF_HEALTH_CHECK_TIMES,
+    CONF_HEALTH_BATTERY_THRESHOLD,
 )
 
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -109,6 +115,9 @@ DEFAULTS = {
     CONF_BUTTON_HOLD: "none",
     CONF_SCHEDULES_ENABLED: False,
     CONF_SCHEDULES: {},
+    CONF_HEALTH_CHECK_ENABLED: False,
+    CONF_HEALTH_CHECK_TIMES: ["09:00"],
+    CONF_HEALTH_BATTERY_THRESHOLD: 20,
 }
 
 BUTTON_ACTIONS = ("arm", "disarm", "toggle", "none")
@@ -116,6 +125,7 @@ LIGHT_MODES = ("flash_long", "flash_short", "solid_red", "solid_white")
 
 EVENT_TRIGGERED = f"{DOMAIN}_triggered"
 EVENT_FLOOD = f"{DOMAIN}_flood"
+EVENT_RUN_HEALTH_CHECK = f"{DOMAIN}_run_health_check"
 
 
 def opt(options: dict, key: str):

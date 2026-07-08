@@ -22,6 +22,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from .const import (
     DOMAIN,
     ENTITY_LIST_KEYS,
+    EVENT_RUN_HEALTH_CHECK,
     PANEL_JS_URL,
     PANEL_NAME,
     PANEL_URL_PATH,
@@ -114,6 +115,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 for key in SETTINGS_KEYS:
                     if key in call.data:
                         options[key] = call.data[key]
+            elif action == "health_check":
+                # Manual "test now"; the alarm entity listens for this event.
+                hass.bus.async_fire(EVENT_RUN_HEALTH_CHECK)
+                return
             else:
                 _LOGGER.warning("update_config ignored: unknown action %s", action)
                 return

@@ -31,6 +31,10 @@ automations to write.
   06:30 next morning); overnight windows are handled automatically
 - ❤️ **Health page** — battery level, signal (LQI) and online/offline status
   for every sensor, button, siren and bulb, problems sorted first
+- 🔔 **Automatic health alerts** — a self-check runs at times you set (1–2×
+  a day) and pushes a phone notification listing any offline or low-battery
+  devices so you can fix them before they matter; includes a "test now"
+  button. Low-battery threshold is configurable
 - 📜 **Activity log** on the dashboard: arms, disarms, triggers, water leaks
   and schedule actions with timestamps (survives restarts)
 - 📱 **Phone notifications** via the Home Assistant companion app on trigger,
