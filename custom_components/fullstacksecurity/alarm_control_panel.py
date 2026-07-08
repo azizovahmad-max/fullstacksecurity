@@ -80,7 +80,10 @@ MAX_HISTORY = 25
 SIREN_REFRESH_SECONDS = 3
 
 # Half-period of the "arming in progress" indicator flash, in seconds.
-ARMING_FLASH_SECONDS = 0.7
+# Zigbee bulbs can't reliably switch faster than about a second over the mesh,
+# and many fade between states, so a rapid flash just blurs into a solid color.
+# ~1s gives a clear, visible on/off blink most bulbs can actually keep up with.
+ARMING_FLASH_SECONDS = 1.0
 
 
 async def async_setup_entry(
@@ -301,6 +304,11 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._stop_arming_flash()
         if not self._armed_lights:
             return
+        _LOGGER.info(
+            "Arming flash: blinking %s every %ss during exit delay",
+            self._armed_lights,
+            ARMING_FLASH_SECONDS,
+        )
         self._flash_on = False
 
         @callback

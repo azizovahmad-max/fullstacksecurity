@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel/card (v2.9.0) */
+/* FullStack Security - sidebar panel/card (v2.9.1) */
 (() => {
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },
@@ -41,6 +41,39 @@
     "notify_arm_disarm", "schedules_enabled", "schedules",
     "health_check_enabled", "health_check_times", "health_battery_threshold",
   ];
+
+  // Shared status pill logic used by both the sidebar panel and the card.
+  function computeDeviceState(hass, listKey, entityId) {
+    const s = hass && hass.states ? hass.states[entityId] : undefined;
+    if (!s || s.state === "unavailable") {
+      // Doors/vibration/flood offline is a security hole (red); a siren, light
+      // or button offline still needs attention (amber), never a silent grey.
+      const critical = ["doors", "vibration", "flood"].includes(listKey);
+      return { text: "OFFLINE", cls: critical ? "alert static" : "warn" };
+    }
+    if (s.state === "unknown" || s.state === "") {
+      return listKey === "buttons"
+        ? { text: "READY", cls: "idle" }
+        : { text: "NO DATA", cls: "warn" };
+    }
+    const on = s.state === "on";
+    switch (listKey) {
+      case "doors": return on ? { text: "OPEN", cls: "alert" } : { text: "CLOSED", cls: "safe" };
+      case "vibration": return on ? { text: "VIBRATION", cls: "alert" } : { text: "CLEAR", cls: "safe" };
+      case "flood": return on ? { text: "WET", cls: "water" } : { text: "DRY", cls: "safe" };
+      case "sirens": return on ? { text: "SOUNDING", cls: "alert" } : { text: "IDLE", cls: "idle" };
+      case "lights":
+      case "armed_lights": return on ? { text: "ON", cls: "warn" } : { text: "OFF", cls: "idle" };
+      case "buttons": {
+        if (s.entity_id.startsWith("event.")) {
+          const t = s.attributes.event_type;
+          return { text: t ? String(t).toUpperCase() : "READY", cls: "idle" };
+        }
+        return { text: s.state ? s.state.toUpperCase() : "READY", cls: "idle" };
+      }
+    }
+    return { text: String(s.state).toUpperCase(), cls: "idle" };
+  }
 
   class FullStackSecurityPanel extends HTMLElement {
     constructor() {
@@ -151,35 +184,7 @@
     }
 
     _deviceState(listKey, entityId) {
-      const s = this._hass.states[entityId];
-      if (!s || s.state === "unavailable") {
-        // A dead security/flood sensor is a real problem, not a neutral state.
-        const critical = ["doors", "vibration", "flood"].includes(listKey);
-        return { text: "OFFLINE", cls: critical ? "alert static" : "idle" };
-      }
-      if (s.state === "unknown" || s.state === "") {
-        // No report since restart - normal for z2m sensors without retain.
-        return listKey === "buttons"
-          ? { text: "READY", cls: "idle" }
-          : { text: "NO DATA", cls: "warn" };
-      }
-      const on = s.state === "on";
-      switch (listKey) {
-        case "doors": return on ? { text: "OPEN", cls: "alert" } : { text: "CLOSED", cls: "safe" };
-        case "vibration": return on ? { text: "VIBRATION", cls: "alert" } : { text: "CLEAR", cls: "safe" };
-        case "flood": return on ? { text: "WET", cls: "water" } : { text: "DRY", cls: "safe" };
-        case "sirens": return on ? { text: "SOUNDING", cls: "alert" } : { text: "IDLE", cls: "idle" };
-        case "lights":
-        case "armed_lights": return on ? { text: "ON", cls: "warn" } : { text: "OFF", cls: "idle" };
-        case "buttons": {
-          if (s.entity_id.startsWith("event.")) {
-            const t = s.attributes.event_type;
-            return { text: t ? String(t).toUpperCase() : "READY", cls: "idle" };
-          }
-          return { text: s.state ? s.state.toUpperCase() : "READY", cls: "idle" };
-        }
-      }
-      return { text: s.state.toUpperCase(), cls: "idle" };
+      return computeDeviceState(this._hass, listKey, entityId);
     }
 
     _batteryFor(entityId) {
@@ -1266,6 +1271,10 @@
   }
 
   class FullStackSecurityCard extends HTMLElement {
+    static getStubConfig() {
+      return { entity: "alarm_control_panel.fullstack_security" };
+    }
+
     setConfig(config) {
       this._config = config || {};
       if (!this.shadowRoot) this.attachShadow({ mode: "open" });
@@ -1302,13 +1311,20 @@
     }
 
     _deviceState(listKey, entityId) {
-      const panel = document.createElement("fullstacksecurity-panel");
-      panel._hass = this._hass;
-      return panel._deviceState(listKey, entityId);
+      return computeDeviceState(this._hass, listKey, entityId);
     }
 
     _render() {
       if (!this.shadowRoot || !this._hass) return;
+      try {
+        this._renderInner();
+      } catch (err) {
+        this.shadowRoot.innerHTML =
+          `<ha-card><div style="padding:18px;color:var(--secondary-text-color)">FullStack Security card error: ${err && err.message ? err.message : err}</div></ha-card>`;
+      }
+    }
+
+    _renderInner() {
       const id = this._entityId();
       const alarm = id ? this._hass.states[id] : undefined;
       if (!alarm) {
