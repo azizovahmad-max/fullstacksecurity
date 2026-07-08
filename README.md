@@ -22,8 +22,10 @@ automations to write.
 - 📢 **Sirens** with preset sound/tone, duration and volume (real `siren`
   entities and switch-based sirens both supported)
 - 💡 **Lights** flash or turn solid red/white when the alarm triggers
-- 🔴 **Armed indicator lights** — chosen bulbs hold any color you pick
-  (default red) the whole time the system is armed, and turn off on disarm
+- 🚦 **Status indicator lights** — chosen bulbs show the system state by
+  color: a pick-your-own **armed color** (default red) while arming/armed,
+  and optionally a **disarmed color** (default green) when disarmed — or
+  they simply turn off when disarmed if you prefer
 - 📅 **Auto-arm schedule** — a routine per weekday (e.g. arm 22:30, disarm
   06:30 next morning); overnight windows are handled automatically
 - ❤️ **Health page** — battery level, signal (LQI) and online/offline status

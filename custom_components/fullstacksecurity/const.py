@@ -1,7 +1,7 @@
 """Constants for the FullStack Security integration."""
 
 DOMAIN = "fullstacksecurity"
-VERSION = "2.6.2"
+VERSION = "2.7.0"
 
 PANEL_URL_PATH = "fullstacksecurity"
 PANEL_NAME = "fullstacksecurity-panel"
@@ -42,6 +42,8 @@ CONF_SIREN_VOLUME = "siren_volume"
 CONF_LIGHT_MODE = "light_mode"
 CONF_LIGHT_DURATION = "light_duration"
 CONF_ARMED_LIGHT_COLOR = "armed_light_color"
+CONF_DISARMED_LIGHTS_ON = "disarmed_lights_on"
+CONF_DISARMED_LIGHT_COLOR = "disarmed_light_color"
 CONF_NOTIFY_SERVICES = "notify_services"
 CONF_NOTIFY_ARM_DISARM = "notify_arm_disarm"
 CONF_FLOOD_SIREN = "flood_siren"
@@ -61,6 +63,8 @@ SETTINGS_KEYS = (
     CONF_LIGHT_MODE,
     CONF_LIGHT_DURATION,
     CONF_ARMED_LIGHT_COLOR,
+    CONF_DISARMED_LIGHTS_ON,
+    CONF_DISARMED_LIGHT_COLOR,
     CONF_NOTIFY_SERVICES,
     CONF_NOTIFY_ARM_DISARM,
     CONF_FLOOD_SIREN,
@@ -91,6 +95,8 @@ DEFAULTS = {
     CONF_LIGHT_MODE: "flash_long",
     CONF_LIGHT_DURATION: 0,
     CONF_ARMED_LIGHT_COLOR: "#ff0000",
+    CONF_DISARMED_LIGHTS_ON: False,
+    CONF_DISARMED_LIGHT_COLOR: "#00c800",
     CONF_NOTIFY_SERVICES: [],
     CONF_NOTIFY_ARM_DISARM: False,
     CONF_FLOOD_SIREN: True,

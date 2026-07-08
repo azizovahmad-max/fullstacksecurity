@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel/card (v2.6.2) */
+/* FullStack Security - sidebar panel/card (v2.7.0) */
 (() => {
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },
@@ -6,7 +6,7 @@
     flood: { title: "Flood / water leak sensors", icon: "mdi:water-alert" },
     sirens: { title: "Sirens", icon: "mdi:bullhorn" },
     lights: { title: "Alarm lights (flash on trigger)", icon: "mdi:lightbulb-on" },
-    armed_lights: { title: "Armed indicator lights (stay colored while armed)", icon: "mdi:lightbulb-group" },
+    armed_lights: { title: "Status indicator lights (color by armed/disarmed state)", icon: "mdi:lightbulb-group" },
     buttons: { title: "Buttons / remotes", icon: "mdi:gesture-double-tap" },
   };
 
@@ -36,7 +36,8 @@
   ];
   const CONFIG_ATTRS = [
     ...Object.keys(LISTS), "mqtt_buttons", ...SETTINGS_FIELDS, "siren_volume",
-    "armed_light_color", "flood_siren", "notify_services",
+    "armed_light_color", "disarmed_light_color", "disarmed_lights_on",
+    "flood_siren", "notify_services",
     "notify_arm_disarm", "schedules_enabled", "schedules",
   ];
 
@@ -604,10 +605,10 @@
           </section>
 
           <section class="card">
-            <h2><ha-icon icon="mdi:lightbulb-on"></ha-icon> Lights</h2>
-            <p class="hint">"Alarm lights" act when the alarm triggers. "Armed indicator lights" hold the chosen color the whole time the system is armed.</p>
+            <h2><ha-icon icon="mdi:lightbulb-alert"></ha-icon> Alarm lights (on trigger)</h2>
+            <p class="hint">The "Alarm lights" you added in Devices flash or change color when the alarm is triggered.</p>
             <div class="grid2">
-              <div class="field"><label>Alarm light action (on trigger)</label>
+              <div class="field"><label>Action when triggered</label>
                 <select id="f-light_mode">
                   <option value="flash_long">Flash (long)</option>
                   <option value="flash_short">Flash (short)</option>
@@ -615,15 +616,33 @@
                   <option value="solid_white">Solid white</option>
                 </select>
               </div>
-              <div class="field"><label>Alarm light duration (seconds, 0 = until disarmed)</label><input type="number" min="0" id="f-light_duration"></div>
+              <div class="field"><label>Duration (seconds, 0 = until disarmed)</label><input type="number" min="0" id="f-light_duration"></div>
             </div>
-            <div class="field" style="margin-top:14px;">
-              <label>Armed indicator color</label>
-              <div class="colorline">
-                <input type="color" id="f-armed_light_color" value="#ff0000">
-                <span class="hint" style="margin:0;">Bulbs in "Armed indicator lights" turn this color while armed and turn off on disarm.</span>
+          </section>
+
+          <section class="card">
+            <h2><ha-icon icon="mdi:lightbulb-group"></ha-icon> Status indicator lights</h2>
+            <p class="hint">The "Status indicator lights" you added in Devices show a color for the current state — e.g. green when disarmed, red when armed.</p>
+            <div class="grid2">
+              <div class="field">
+                <label>Armed color</label>
+                <div class="colorline">
+                  <input type="color" id="f-armed_light_color" value="#ff0000">
+                  <span class="hint" style="margin:0;">Shown while arming and armed.</span>
+                </div>
+              </div>
+              <div class="field">
+                <label>Disarmed color</label>
+                <div class="colorline">
+                  <input type="color" id="f-disarmed_light_color" value="#00c800">
+                  <span class="hint" style="margin:0;">Shown when disarmed (if enabled below).</span>
+                </div>
               </div>
             </div>
+            <label class="checkline" style="margin-top:8px;">
+              <input type="checkbox" id="f-disarmed_lights_on">
+              Show the disarmed color when disarmed (otherwise the lights turn off)
+            </label>
           </section>
 
           <section class="card">
@@ -817,6 +836,8 @@
       }
       data.siren_volume = parseInt(this.$("#f-siren_volume").value, 10);
       data.armed_light_color = this.$("#f-armed_light_color").value;
+      data.disarmed_light_color = this.$("#f-disarmed_light_color").value;
+      data.disarmed_lights_on = this.$("#f-disarmed_lights_on").checked;
       data.flood_siren = this.$("#f-flood_siren").checked;
       data.notify_arm_disarm = this.$("#f-notify_arm_disarm").checked;
       data.notify_services = this.$$("#notify-list input:checked").map((c) => c.value);
@@ -1148,6 +1169,8 @@
       set("#f-light_mode", a.light_mode || "flash_long");
       set("#f-light_duration", a.light_duration ?? 0);
       set("#f-armed_light_color", /^#[0-9a-fA-F]{6}$/.test(a.armed_light_color || "") ? a.armed_light_color : "#ff0000");
+      set("#f-disarmed_light_color", /^#[0-9a-fA-F]{6}$/.test(a.disarmed_light_color || "") ? a.disarmed_light_color : "#00c800");
+      this.$("#f-disarmed_lights_on").checked = a.disarmed_lights_on === true;
       set("#f-button_single", a.button_single || "arm");
       set("#f-button_double", a.button_double || "disarm");
       set("#f-button_triple", a.button_triple || "none");
