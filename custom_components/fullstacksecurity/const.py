@@ -1,7 +1,7 @@
 """Constants for the FullStack Security integration."""
 
 DOMAIN = "fullstacksecurity"
-VERSION = "2.9.2"
+VERSION = "2.9.3"
 
 PANEL_URL_PATH = "fullstacksecurity"
 PANEL_NAME = "fullstacksecurity-panel"
@@ -119,7 +119,7 @@ DEFAULTS = {
     CONF_SCHEDULES: {},
     CONF_HEALTH_CHECK_ENABLED: False,
     CONF_HEALTH_CHECK_DAYS: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
-    CONF_HEALTH_CHECK_TIMES: ["09:00"],
+    CONF_HEALTH_CHECK_TIMES: ["09:00", "21:00"],
     CONF_HEALTH_BATTERY_THRESHOLD: 20,
 }
 

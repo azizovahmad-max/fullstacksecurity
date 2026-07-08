@@ -1245,7 +1245,7 @@
       const times = Array.isArray(a.health_check_times) ? a.health_check_times : [];
       this.$("#f-health_check_enabled").checked = a.health_check_enabled === true;
       set("#f-health_time1", times[0] || "09:00");
-      set("#f-health_time2", times[1] || "");
+      set("#f-health_time2", times[1] || "21:00");
       set("#f-health_battery_threshold", a.health_battery_threshold ?? 20);
       const days = Array.isArray(a.health_check_days) ? a.health_check_days : ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
       this.$$("#f-health_days input[type=checkbox]").forEach(cb => {
