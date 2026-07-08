@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel/card (v2.7.0) */
+/* FullStack Security - sidebar panel/card (v2.8.0) */
 (() => {
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },
@@ -37,7 +37,7 @@
   const CONFIG_ATTRS = [
     ...Object.keys(LISTS), "mqtt_buttons", ...SETTINGS_FIELDS, "siren_volume",
     "armed_light_color", "disarmed_light_color", "disarmed_lights_on",
-    "flood_siren", "notify_services",
+    "arming_flash", "flood_siren", "notify_services",
     "notify_arm_disarm", "schedules_enabled", "schedules",
   ];
 
@@ -643,6 +643,10 @@
               <input type="checkbox" id="f-disarmed_lights_on">
               Show the disarmed color when disarmed (otherwise the lights turn off)
             </label>
+            <label class="checkline">
+              <input type="checkbox" id="f-arming_flash">
+              Flash quickly during the exit delay, then go solid once armed
+            </label>
           </section>
 
           <section class="card">
@@ -838,6 +842,7 @@
       data.armed_light_color = this.$("#f-armed_light_color").value;
       data.disarmed_light_color = this.$("#f-disarmed_light_color").value;
       data.disarmed_lights_on = this.$("#f-disarmed_lights_on").checked;
+      data.arming_flash = this.$("#f-arming_flash").checked;
       data.flood_siren = this.$("#f-flood_siren").checked;
       data.notify_arm_disarm = this.$("#f-notify_arm_disarm").checked;
       data.notify_services = this.$$("#notify-list input:checked").map((c) => c.value);
@@ -1171,6 +1176,7 @@
       set("#f-armed_light_color", /^#[0-9a-fA-F]{6}$/.test(a.armed_light_color || "") ? a.armed_light_color : "#ff0000");
       set("#f-disarmed_light_color", /^#[0-9a-fA-F]{6}$/.test(a.disarmed_light_color || "") ? a.disarmed_light_color : "#00c800");
       this.$("#f-disarmed_lights_on").checked = a.disarmed_lights_on === true;
+      this.$("#f-arming_flash").checked = a.arming_flash === true;
       set("#f-button_single", a.button_single || "arm");
       set("#f-button_double", a.button_double || "disarm");
       set("#f-button_triple", a.button_triple || "none");

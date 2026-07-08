@@ -28,6 +28,7 @@ from .const import (
     CONF_ARMED_LIGHT_COLOR,
     CONF_ARMED_LIGHTS,
     CONF_ARMING_DELAY,
+    CONF_ARMING_FLASH,
     CONF_DISARMED_LIGHT_COLOR,
     CONF_DISARMED_LIGHTS_ON,
     CONF_BUTTON_DOUBLE,
@@ -73,6 +74,9 @@ MAX_HISTORY = 25
 # what we ask for, so while the alarm is triggered we re-send turn_on on this
 # interval to keep them sounding.
 SIREN_REFRESH_SECONDS = 3
+
+# Half-period of the "arming in progress" indicator flash, in seconds.
+ARMING_FLASH_SECONDS = 0.7
 
 
 async def async_setup_entry(
@@ -141,6 +145,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._light_mode = str(opt(options, CONF_LIGHT_MODE))
         self._light_duration = int(opt(options, CONF_LIGHT_DURATION))
         self._armed_light_color = str(opt(options, CONF_ARMED_LIGHT_COLOR))
+        self._arming_flash = bool(opt(options, CONF_ARMING_FLASH))
         self._disarmed_lights_on = bool(opt(options, CONF_DISARMED_LIGHTS_ON))
         self._disarmed_light_color = str(opt(options, CONF_DISARMED_LIGHT_COLOR))
         self._flood_siren = bool(opt(options, CONF_FLOOD_SIREN))
@@ -161,6 +166,8 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._last_triggered_by: str | None = None
         self._timer_cancel = None
         self._siren_loop_cancel = None
+        self._flash_loop_cancel = None
+        self._flash_on = False
         self._history: list[dict] = []
 
     # ------------------------------------------------------------------ setup
@@ -265,6 +272,51 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
     async def async_will_remove_from_hass(self) -> None:
         self._cancel_timer()
         self._stop_siren_loop()
+        self._stop_arming_flash()
+
+    # ------------------------------------------------------------ arming flash
+
+    def _stop_arming_flash(self) -> None:
+        if self._flash_loop_cancel:
+            self._flash_loop_cancel()
+            self._flash_loop_cancel = None
+
+    def _start_arming_flash(self) -> None:
+        """Flash the indicator bulbs (armed color / off) during the exit delay."""
+        self._stop_arming_flash()
+        if not self._armed_lights:
+            return
+        self._flash_on = False
+
+        @callback
+        def _tick(_now) -> None:
+            if self._attr_alarm_state != AlarmControlPanelState.ARMING:
+                self._stop_arming_flash()
+                return
+            self._flash_on = not self._flash_on
+            if self._flash_on:
+                data = {
+                    ATTR_ENTITY_ID: self._armed_lights,
+                    "rgb_color": _hex_to_rgb(self._armed_light_color),
+                    "transition": 0,
+                }
+                self.hass.async_create_task(
+                    self.hass.services.async_call("light", "turn_on", data, blocking=False)
+                )
+            else:
+                self.hass.async_create_task(
+                    self.hass.services.async_call(
+                        "light",
+                        "turn_off",
+                        {ATTR_ENTITY_ID: self._armed_lights, "transition": 0},
+                        blocking=False,
+                    )
+                )
+
+        _tick(None)  # start immediately
+        self._flash_loop_cancel = async_track_time_interval(
+            self.hass, _tick, timedelta(seconds=ARMING_FLASH_SECONDS)
+        )
 
     def _stop_siren_loop(self) -> None:
         if self._siren_loop_cancel:
@@ -372,6 +424,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             "light_mode": self._light_mode,
             "light_duration": self._light_duration,
             "armed_light_color": self._armed_light_color,
+            "arming_flash": self._arming_flash,
             "disarmed_lights_on": self._disarmed_lights_on,
             "disarmed_light_color": self._disarmed_light_color,
             "flood_siren": self._flood_siren,
@@ -540,9 +593,12 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._delay_total = self._arming_delay
         self._delay_ends_at = dt_util.utcnow() + timedelta(seconds=self._arming_delay)
         self.async_write_ha_state()
-        # Switch indicator lights to the armed color right away so pressing
-        # arm gives immediate feedback during the exit delay.
-        await self._async_apply_indicator_lights(True)
+        # During the exit delay: flash the indicator (if enabled), otherwise
+        # switch it to solid armed color right away for immediate feedback.
+        if self._arming_flash and self._armed_lights:
+            self._start_arming_flash()
+        else:
+            await self._async_apply_indicator_lights(True)
 
         @callback
         def _finish_arming(_now) -> None:
@@ -553,6 +609,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
 
     async def _async_set_armed(self, auto: bool = False) -> None:
         self._cancel_timer()
+        self._stop_arming_flash()
         self._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY
         self._log("shield", "Armed by schedule" if auto else "System armed")
         self.async_write_ha_state()
@@ -601,6 +658,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         was = self._attr_alarm_state
         self._cancel_timer()
         self._stop_siren_loop()
+        self._stop_arming_flash()
         self._attr_alarm_state = AlarmControlPanelState.DISARMED
         self._last_triggered_by = None
         if was != AlarmControlPanelState.DISARMED:

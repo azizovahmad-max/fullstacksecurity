@@ -25,7 +25,8 @@ automations to write.
 - 🚦 **Status indicator lights** — chosen bulbs show the system state by
   color: a pick-your-own **armed color** (default red) while arming/armed,
   and optionally a **disarmed color** (default green) when disarmed — or
-  they simply turn off when disarmed if you prefer
+  they simply turn off when disarmed if you prefer. Optionally they
+  **flash quickly during the exit delay**, then go solid once armed
 - 📅 **Auto-arm schedule** — a routine per weekday (e.g. arm 22:30, disarm
   06:30 next morning); overnight windows are handled automatically
 - ❤️ **Health page** — battery level, signal (LQI) and online/offline status
