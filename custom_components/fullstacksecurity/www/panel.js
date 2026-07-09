@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel/card (v2.9.1) */
+/* FullStack Security - sidebar panel/card (v2.9.6) */
 (() => {
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },

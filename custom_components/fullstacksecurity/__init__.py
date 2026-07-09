@@ -64,6 +64,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         data["frontend_module_registered"] = True
         _LOGGER.debug("Registered frontend card module: %s", PANEL_JS_URL)
 
+    # Also register as a Lovelace resource so the mobile companion app
+    # picks up the card element even when add_extra_js_url is ignored.
+    if not data.get("lovelace_resource_registered"):
+        try:
+            from homeassistant.components.lovelace.resources import (
+                ResourceStorageCollection,
+            )
+            if "lovelace" in hass.data and hasattr(hass.data["lovelace"], "resources"):
+                resources: ResourceStorageCollection = hass.data["lovelace"].resources
+                # Only add if not already present.
+                already = any(
+                    r.get("url", "").startswith(STATIC_URL_BASE)
+                    for r in (resources.async_items() if hasattr(resources, "async_items") else [])
+                )
+                if not already:
+                    await resources.async_create_item(
+                        {"res_type": "module", "url": PANEL_JS_URL}
+                    )
+                    _LOGGER.debug("Registered Lovelace resource: %s", PANEL_JS_URL)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Lovelace resource registration skipped (YAML mode or unavailable)")
+        data["lovelace_resource_registered"] = True
+
     async_register_built_in_panel(
         hass,
         component_name="custom",
