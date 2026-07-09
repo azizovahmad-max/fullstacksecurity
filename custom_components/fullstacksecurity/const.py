@@ -1,7 +1,7 @@
 """Constants for the FullStack Security integration."""
 
 DOMAIN = "fullstacksecurity"
-VERSION = "2.9.6"
+VERSION = "2.10.0"
 
 PANEL_URL_PATH = "fullstacksecurity"
 PANEL_NAME = "fullstacksecurity-panel"
@@ -47,6 +47,7 @@ CONF_DISARMED_LIGHTS_ON = "disarmed_lights_on"
 CONF_DISARMED_LIGHT_COLOR = "disarmed_light_color"
 CONF_NOTIFY_SERVICES = "notify_services"
 CONF_NOTIFY_ARM_DISARM = "notify_arm_disarm"
+CONF_CRITICAL_ALERTS = "critical_alerts"
 CONF_FLOOD_SIREN = "flood_siren"
 CONF_BUTTON_SINGLE = "button_single"
 CONF_BUTTON_DOUBLE = "button_double"
@@ -73,6 +74,7 @@ SETTINGS_KEYS = (
     CONF_DISARMED_LIGHT_COLOR,
     CONF_NOTIFY_SERVICES,
     CONF_NOTIFY_ARM_DISARM,
+    CONF_CRITICAL_ALERTS,
     CONF_FLOOD_SIREN,
     CONF_BUTTON_SINGLE,
     CONF_BUTTON_DOUBLE,
@@ -110,6 +112,7 @@ DEFAULTS = {
     CONF_DISARMED_LIGHT_COLOR: "#00c800",
     CONF_NOTIFY_SERVICES: [],
     CONF_NOTIFY_ARM_DISARM: False,
+    CONF_CRITICAL_ALERTS: True,
     CONF_FLOOD_SIREN: True,
     CONF_BUTTON_SINGLE: "arm",
     CONF_BUTTON_DOUBLE: "disarm",
@@ -129,6 +132,12 @@ LIGHT_MODES = ("flash_long", "flash_short", "solid_red", "solid_white")
 EVENT_TRIGGERED = f"{DOMAIN}_triggered"
 EVENT_FLOOD = f"{DOMAIN}_flood"
 EVENT_RUN_HEALTH_CHECK = f"{DOMAIN}_run_health_check"
+
+# Companion-app notification action ids and tags
+NOTIFY_ACTION_DISARM = "FULLSTACKSECURITY_DISARM"
+NOTIFY_ACTION_SILENCE = "FULLSTACKSECURITY_SILENCE"
+NOTIFY_TAG_ALARM = "fullstacksecurity_alarm"
+NOTIFY_TAG_FLOOD = "fullstacksecurity_flood"
 
 
 def opt(options: dict, key: str):

@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel/card (v2.9.6) */
+/* FullStack Security - sidebar panel/card (v2.10.0) */
 (() => {
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },
@@ -38,7 +38,7 @@
     ...Object.keys(LISTS), "mqtt_buttons", ...SETTINGS_FIELDS, "siren_volume",
     "armed_light_color", "disarmed_light_color", "disarmed_lights_on",
     "arming_flash", "flood_siren", "notify_services",
-    "notify_arm_disarm", "schedules_enabled", "schedules",
+    "notify_arm_disarm", "critical_alerts", "schedules_enabled", "schedules",
     "health_check_enabled", "health_check_times", "health_battery_threshold",
   ];
 
@@ -691,6 +691,15 @@
             <label class="checkline" style="border-top:1px solid var(--fss-border); margin-top:8px; padding-top:14px;">
               <input type="checkbox" id="f-notify_arm_disarm"> Also notify on every arm / disarm
             </label>
+            <label class="checkline">
+              <input type="checkbox" id="f-critical_alerts">
+              Critical alerts — alarm, leak and sensor-offline alerts break through Do&nbsp;Not&nbsp;Disturb / silent mode
+            </label>
+            <p class="hint" style="margin:6px 0 0;">
+              Alarm and leak notifications include Disarm / Silence buttons you
+              can tap right on the phone. A sensor dropping offline while the
+              system is armed alerts you immediately.
+            </p>
           </section>
 
           <section class="card">
@@ -896,6 +905,7 @@
       data.arming_flash = this.$("#f-arming_flash").checked;
       data.flood_siren = this.$("#f-flood_siren").checked;
       data.notify_arm_disarm = this.$("#f-notify_arm_disarm").checked;
+      data.critical_alerts = this.$("#f-critical_alerts").checked;
       data.notify_services = this.$$("#notify-list input:checked").map((c) => c.value);
       data.health_check_enabled = this.$("#f-health_check_enabled").checked;
       data.health_check_days = this.$$("#f-health_days input:checked").map((c) => c.value);
@@ -1242,6 +1252,7 @@
       set("#f-button_hold", a.button_hold || "none");
       this.$("#f-flood_siren").checked = a.flood_siren !== false;
       this.$("#f-notify_arm_disarm").checked = a.notify_arm_disarm === true;
+      this.$("#f-critical_alerts").checked = a.critical_alerts !== false;
 
       const times = Array.isArray(a.health_check_times) ? a.health_check_times : [];
       this.$("#f-health_check_enabled").checked = a.health_check_enabled === true;

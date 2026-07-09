@@ -25,6 +25,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_CRITICAL_ALERTS,
     CONF_FLOOD,
     CONF_FLOOD_SIREN,
     CONF_SIREN_DURATION,
@@ -32,6 +33,8 @@ from .const import (
     CONF_SIREN_VOLUME,
     CONF_SIRENS,
     EVENT_FLOOD,
+    NOTIFY_ACTION_SILENCE,
+    NOTIFY_TAG_FLOOD,
     get_notify_services,
     opt,
 )
@@ -68,6 +71,7 @@ class FloodAlertSensor(BinarySensorEntity):
         self._siren_volume = int(opt(options, CONF_SIREN_VOLUME))
         self._flood_siren = bool(opt(options, CONF_FLOOD_SIREN))
         self._notify_services = get_notify_services(options)
+        self._critical_alerts = bool(opt(options, CONF_CRITICAL_ALERTS))
         self._attr_is_on = False
         self._siren_started = False
         self._siren_loop_cancel = None
@@ -80,6 +84,24 @@ class FloodAlertSensor(BinarySensorEntity):
             )
         # Pick up sensors that are already wet at startup without re-alerting.
         self._attr_is_on = bool(self._wet_sensors())
+
+        # "Silence siren" tapped on a flood notification must also stop this
+        # entity's keep-alive loop or it would restart the siren seconds later.
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "mobile_app_notification_action", self._notification_action
+            )
+        )
+
+    @callback
+    def _notification_action(self, event) -> None:
+        if event.data.get("action") != NOTIFY_ACTION_SILENCE:
+            return
+        if self._siren_started:
+            self._siren_started = False
+            self._stop_siren_loop()
+            _LOGGER.info("Flood siren silenced from phone")
+            self.hass.async_create_task(async_sirens_off(self.hass, self._sirens))
 
     async def async_will_remove_from_hass(self) -> None:
         self._stop_siren_loop()
@@ -165,6 +187,9 @@ class FloodAlertSensor(BinarySensorEntity):
             self._notify_services,
             "💧 WATER LEAK DETECTED",
             f"Water detected by: {names}",
+            critical=self._critical_alerts,
+            actions=[{"action": NOTIFY_ACTION_SILENCE, "title": "Silence siren"}],
+            tag=NOTIFY_TAG_FLOOD,
         )
 
     async def _async_clear(self) -> None:
@@ -184,9 +209,11 @@ class FloodAlertSensor(BinarySensorEntity):
             if not alarm or alarm.state != "triggered":
                 await async_sirens_off(self.hass, self._sirens)
 
+        # Same tag as the alert, so this replaces the critical notification.
         await async_notify_all(
             self.hass,
             self._notify_services,
             "💧 Water leak cleared",
             "All flood sensors are dry again.",
+            tag=NOTIFY_TAG_FLOOD,
         )

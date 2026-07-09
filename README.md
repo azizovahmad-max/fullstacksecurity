@@ -39,6 +39,12 @@ automations to write.
   and schedule actions with timestamps (survives restarts)
 - 📱 **Phone notifications** via the Home Assistant companion app on trigger,
   water leak, and failed arming (optionally on every arm/disarm too)
+- 🔕➡️🔔 **Critical alerts** — alarm, leak and sensor-offline notifications
+  break through Do Not Disturb / silent mode on iOS and Android, with
+  **Disarm / Silence siren** buttons right in the notification (togglable)
+- 🛰️ **Sensor lost while armed** — if a door/vibration sensor drops offline
+  while the system is armed you're alerted immediately (dying battery or
+  interference), with a follow-up when it comes back online
 - 🖥️ **Sidebar panel** with live sensor states, arm/disarm countdowns, device
   management and all settings — themed to match your HA light/dark theme
 - 🧩 **Dashboard card** (`custom:fullstacksecurity-card`) for normal Home

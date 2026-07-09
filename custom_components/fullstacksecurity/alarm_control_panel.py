@@ -36,6 +36,7 @@ from .const import (
     CONF_BUTTON_SINGLE,
     CONF_BUTTON_TRIPLE,
     CONF_BUTTONS,
+    CONF_CRITICAL_ALERTS,
     CONF_MQTT_BUTTONS,
     CONF_DOORS,
     CONF_ENTRY_DELAY,
@@ -60,11 +61,20 @@ from .const import (
     EVENT_FLOOD,
     EVENT_RUN_HEALTH_CHECK,
     EVENT_TRIGGERED,
+    NOTIFY_ACTION_DISARM,
+    NOTIFY_ACTION_SILENCE,
+    NOTIFY_TAG_ALARM,
     WEEKDAYS,
     get_notify_services,
     opt,
 )
-from .helpers import async_notify_all, async_sirens_off, async_sirens_on, friendly_name
+from .helpers import (
+    async_clear_notification,
+    async_notify_all,
+    async_sirens_off,
+    async_sirens_on,
+    friendly_name,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -159,6 +169,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._flood_siren = bool(opt(options, CONF_FLOOD_SIREN))
         self._notify_services = get_notify_services(options)
         self._notify_arm_disarm = bool(opt(options, CONF_NOTIFY_ARM_DISARM))
+        self._critical_alerts = bool(opt(options, CONF_CRITICAL_ALERTS))
         self._button_actions = {
             "single": opt(options, CONF_BUTTON_SINGLE),
             "double": opt(options, CONF_BUTTON_DOUBLE),
@@ -183,6 +194,8 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._flash_loop_cancel = None
         self._flash_on = False
         self._history: list[dict] = []
+        # Sensors already reported offline this armed session (avoid spam).
+        self._offline_notified: set[str] = set()
 
     # ------------------------------------------------------------------ setup
 
@@ -223,6 +236,13 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         # Manual "run health check now" trigger from the panel.
         self.async_on_remove(
             self.hass.bus.async_listen(EVENT_RUN_HEALTH_CHECK, self._health_check_event)
+        )
+
+        # Buttons tapped on companion-app notifications (Disarm / Silence).
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                "mobile_app_notification_action", self._notification_action
+            )
         )
 
         # Minute tick drives the auto-arm schedule and the health check.
@@ -454,6 +474,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             "flood_siren": self._flood_siren,
             "notify_services": self._notify_services,
             "notify_arm_disarm": self._notify_arm_disarm,
+            "critical_alerts": self._critical_alerts,
             "button_single": self._button_actions["single"],
             "button_double": self._button_actions["double"],
             "button_triple": self._button_actions["triple"],
@@ -489,6 +510,48 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             self._handle_button(new_state)
             return
 
+        # A security sensor dropping offline while armed is either a dying
+        # battery or someone interfering - alert immediately, once per sensor
+        # per armed session, instead of waiting for the daily health check.
+        armed_like = self._attr_alarm_state in (
+            AlarmControlPanelState.ARMED_AWAY,
+            AlarmControlPanelState.ARMING,
+            AlarmControlPanelState.PENDING,
+            AlarmControlPanelState.TRIGGERED,
+        )
+        if new_state.state == "unavailable" and old_state.state != "unavailable":
+            self.async_write_ha_state()
+            if armed_like and entity_id not in self._offline_notified:
+                self._offline_notified.add(entity_id)
+                name = friendly_name(self.hass, entity_id)
+                _LOGGER.warning("Sensor %s went OFFLINE while armed", name)
+                self._log("alert", f"{name} went OFFLINE while armed")
+                self.hass.async_create_task(
+                    async_notify_all(
+                        self.hass,
+                        self._notify_services,
+                        "⚠️ SENSOR OFFLINE",
+                        f"{name} went offline while the system is armed - "
+                        "possible dead battery or interference.",
+                        critical=self._critical_alerts,
+                    )
+                )
+            return
+        if old_state.state == "unavailable" and entity_id in self._offline_notified:
+            self._offline_notified.discard(entity_id)
+            name = friendly_name(self.hass, entity_id)
+            self._log("shield", f"{name} is back online")
+            self.hass.async_create_task(
+                async_notify_all(
+                    self.hass,
+                    self._notify_services,
+                    "Security",
+                    f"{name} is back online.",
+                )
+            )
+            # Fall through: if it came back reporting "open" while armed,
+            # normal handling below must still start the entry delay.
+
         if new_state.state != STATE_ON:
             # A sensor closing never changes the alarm, but the open_sensors
             # attribute should refresh for the UI.
@@ -520,6 +583,22 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             return
         _LOGGER.debug("Button %s: %s -> press %s", new_state.entity_id, raw, press)
         self._apply_button_press(press)
+
+    @callback
+    def _notification_action(self, event) -> None:
+        """Handle Disarm / Silence buttons tapped on a phone notification."""
+        action = event.data.get("action")
+        if action == NOTIFY_ACTION_DISARM:
+            if self._attr_alarm_state != AlarmControlPanelState.DISARMED:
+                self.hass.async_create_task(
+                    self.async_alarm_disarm(source="Disarmed from phone notification")
+                )
+        elif action == NOTIFY_ACTION_SILENCE:
+            if self._attr_alarm_state == AlarmControlPanelState.TRIGGERED:
+                self._stop_siren_loop()
+                self._log("alert", "Sirens silenced from phone")
+                self.async_write_ha_state()
+                self.hass.async_create_task(async_sirens_off(self.hass, self._sirens))
 
     @callback
     def _apply_button_press(self, press: str) -> None:
@@ -743,6 +822,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
     async def _async_set_armed(self, auto: bool = False) -> None:
         self._cancel_timer()
         self._stop_arming_flash()
+        self._offline_notified.clear()
         self._attr_alarm_state = AlarmControlPanelState.ARMED_AWAY
         self._log("shield", "Armed by schedule" if auto else "System armed")
         self.async_write_ha_state()
@@ -787,20 +867,30 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
                 "light", "turn_on", {ATTR_ENTITY_ID: self._armed_lights}, blocking=False
             )
 
-    async def async_alarm_disarm(self, code=None, auto: bool = False) -> None:
+    async def async_alarm_disarm(
+        self, code=None, auto: bool = False, source: str | None = None
+    ) -> None:
         was = self._attr_alarm_state
         self._cancel_timer()
         self._stop_siren_loop()
         self._stop_arming_flash()
+        self._offline_notified.clear()
         self._attr_alarm_state = AlarmControlPanelState.DISARMED
         self._last_triggered_by = None
         if was != AlarmControlPanelState.DISARMED:
-            self._log("shield-off", "Disarmed by schedule" if auto else "System disarmed")
+            self._log(
+                "shield-off",
+                source or ("Disarmed by schedule" if auto else "System disarmed"),
+            )
         self.async_write_ha_state()
         _LOGGER.info("FullStack Security disarmed")
 
         if was == AlarmControlPanelState.TRIGGERED:
             await async_sirens_off(self.hass, self._sirens)
+            # Take the now-stale ALARM notification off the phones.
+            await async_clear_notification(
+                self.hass, self._notify_services, NOTIFY_TAG_ALARM
+            )
             if self._lights:
                 await self.hass.services.async_call(
                     "homeassistant",
@@ -903,4 +993,10 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             self._notify_services,
             "🚨 ALARM TRIGGERED",
             f"{name} detected activity while the system was armed.",
+            critical=self._critical_alerts,
+            actions=[
+                {"action": NOTIFY_ACTION_DISARM, "title": "Disarm", "destructive": True},
+                {"action": NOTIFY_ACTION_SILENCE, "title": "Silence siren"},
+            ],
+            tag=NOTIFY_TAG_ALARM,
         )
