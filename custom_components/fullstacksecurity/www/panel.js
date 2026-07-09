@@ -1224,13 +1224,13 @@
     _populateSettings() {
       const a = this._attrs();
       const set = (id, v) => { const el = this.$(id); if (el) el.value = v; };
-      set("#f-arming_delay", a.arming_delay ?? 30);
-      set("#f-entry_delay", a.entry_delay ?? 30);
-      set("#f-siren_duration", a.siren_duration ?? 0);
-      set("#f-siren_volume", a.siren_volume ?? 100);
-      this.$("#volume-label").textContent = `${a.siren_volume ?? 100}%`;
+      set("#f-arming_delay", a.arming_delay !== undefined ? a.arming_delay : 30);
+      set("#f-entry_delay", a.entry_delay !== undefined ? a.entry_delay : 30);
+      set("#f-siren_duration", a.siren_duration !== undefined ? a.siren_duration : 0);
+      set("#f-siren_volume", a.siren_volume !== undefined ? a.siren_volume : 100);
+      this.$("#volume-label").textContent = `${a.siren_volume !== undefined ? a.siren_volume : 100}%`;
       set("#f-light_mode", a.light_mode || "flash_long");
-      set("#f-light_duration", a.light_duration ?? 0);
+      set("#f-light_duration", a.light_duration !== undefined ? a.light_duration : 0);
       set("#f-armed_light_color", /^#[0-9a-fA-F]{6}$/.test(a.armed_light_color || "") ? a.armed_light_color : "#ff0000");
       set("#f-disarmed_light_color", /^#[0-9a-fA-F]{6}$/.test(a.disarmed_light_color || "") ? a.disarmed_light_color : "#00c800");
       this.$("#f-disarmed_lights_on").checked = a.disarmed_lights_on === true;
@@ -1246,7 +1246,7 @@
       this.$("#f-health_check_enabled").checked = a.health_check_enabled === true;
       set("#f-health_time1", times[0] || "09:00");
       set("#f-health_time2", times[1] || "21:00");
-      set("#f-health_battery_threshold", a.health_battery_threshold ?? 20);
+      set("#f-health_battery_threshold", a.health_battery_threshold !== undefined ? a.health_battery_threshold : 20);
       const days = Array.isArray(a.health_check_days) ? a.health_check_days : ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
       this.$$("#f-health_days input[type=checkbox]").forEach(cb => {
           cb.checked = days.includes(cb.value);
@@ -1255,7 +1255,8 @@
       // Siren tones from the configured sirens.
       const tones = new Set();
       (a.sirens || []).forEach((s) => {
-        const t = this._hass.states[s]?.attributes?.available_tones;
+        const stateObj = this._hass.states[s];
+        const t = stateObj && stateObj.attributes ? stateObj.attributes.available_tones : undefined;
         if (Array.isArray(t)) {
           t.forEach((x) => tones.add(typeof x === "object" ? (x.name || x.id) : x));
         }
@@ -1309,10 +1310,10 @@
     }
 
     _entityId() {
-      if (this._config?.entity && this._hass?.states[this._config.entity]) {
+      if (this._config && this._config.entity && this._hass && this._hass.states && this._hass.states[this._config.entity]) {
         return this._config.entity;
       }
-      const states = this._hass?.states || {};
+      const states = (this._hass && this._hass.states) || {};
       if (states["alarm_control_panel.fullstack_security"]) {
         return "alarm_control_panel.fullstack_security";
       }
@@ -1323,7 +1324,7 @@
     }
 
     _name(entityId) {
-      const s = this._hass?.states?.[entityId];
+      const s = (this._hass && this._hass.states) ? this._hass.states[entityId] : undefined;
       return (s && s.attributes.friendly_name) || entityId;
     }
 
