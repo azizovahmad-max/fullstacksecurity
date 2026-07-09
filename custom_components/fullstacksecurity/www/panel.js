@@ -56,7 +56,8 @@
         ? { text: "READY", cls: "idle" }
         : { text: "NO DATA", cls: "warn" };
     }
-    const on = s.state === "on";
+    const st = String(s.state).trim().toLowerCase();
+    const on = ["on", "true", "1", "active", "playing", "open"].includes(st);
     switch (listKey) {
       case "doors": return on ? { text: "OPEN", cls: "alert" } : { text: "CLOSED", cls: "safe" };
       case "vibration": return on ? { text: "VIBRATION", cls: "alert" } : { text: "CLEAR", cls: "safe" };
