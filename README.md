@@ -21,12 +21,11 @@ automations to write.
   subscribes to `zigbee2mqtt/<name>` directly, no entity required
 - 📢 **Sirens** with preset sound/tone, duration and volume (real `siren`
   entities and switch-based sirens both supported)
-- 💡 **Lights** flash or turn solid red/white when the alarm triggers
-- 🚦 **Status indicator lights** — chosen bulbs show the system state by
-  color: a pick-your-own **armed color** (default red) while arming/armed,
-  and optionally a **disarmed color** (default green) when disarmed — or
-  they simply turn off when disarmed if you prefer. Optionally they
-  **flash quickly during the exit delay**, then go solid once armed
+- 🚦 **Lights that do double duty** — the same bulbs show the system state
+  by color (pick-your-own **armed color**, default red, and optionally a
+  **disarmed color**, default green — or off when disarmed), optionally
+  **flash during the exit delay**, and flash or turn solid red/white when
+  the alarm triggers
 - 📅 **Auto-arm schedule** — a routine per weekday (e.g. arm 22:30, disarm
   06:30 next morning); overnight windows are handled automatically
 - ❤️ **Health page** — battery level, signal (LQI) and online/offline status

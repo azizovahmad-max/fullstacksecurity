@@ -46,6 +46,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up FullStackSecurity from a config entry."""
     data = hass.data.setdefault(DOMAIN, {})
 
+    # One-time migration: the old separate "status indicator lights" list is
+    # merged into the single lights list (same bulbs do status + alarm now).
+    # Runs before the update listener is registered, so no reload is fired.
+    legacy_indicator = entry.options.get("armed_lights")
+    if legacy_indicator:
+        merged = list(
+            dict.fromkeys(list(entry.options.get("lights") or []) + list(legacy_indicator))
+        )
+        migrated = dict(entry.options)
+        migrated["lights"] = merged
+        migrated.pop("armed_lights", None)
+        hass.config_entries.async_update_entry(entry, options=migrated)
+        _LOGGER.info("Merged status indicator lights into lights: %s", merged)
+
     # Serve the panel javascript straight from the integration directory.
     if not data.get("static_registered"):
         await hass.http.async_register_static_paths(

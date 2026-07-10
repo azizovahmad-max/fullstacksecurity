@@ -1,7 +1,7 @@
 """Constants for the FullStack Security integration."""
 
 DOMAIN = "fullstacksecurity"
-VERSION = "2.10.0"
+VERSION = "2.11.0"
 
 PANEL_URL_PATH = "fullstacksecurity"
 PANEL_NAME = "fullstacksecurity-panel"
@@ -18,6 +18,8 @@ CONF_VIBRATION = "vibration"
 CONF_FLOOD = "flood"
 CONF_SIRENS = "sirens"
 CONF_LIGHTS = "lights"
+# Legacy key (v2.7-v2.10 had a separate status-indicator list; now merged
+# into CONF_LIGHTS - kept only for the one-time migration on setup).
 CONF_ARMED_LIGHTS = "armed_lights"
 CONF_BUTTONS = "buttons"
 CONF_MQTT_BUTTONS = "mqtt_buttons"
@@ -28,7 +30,6 @@ ENTITY_LIST_KEYS = (
     CONF_FLOOD,
     CONF_SIRENS,
     CONF_LIGHTS,
-    CONF_ARMED_LIGHTS,
     CONF_BUTTONS,
     CONF_MQTT_BUTTONS,
 )
@@ -96,7 +97,6 @@ DEFAULTS = {
     CONF_FLOOD: [],
     CONF_SIRENS: [],
     CONF_LIGHTS: [],
-    CONF_ARMED_LIGHTS: [],
     CONF_BUTTONS: [],
     CONF_MQTT_BUTTONS: [],
     CONF_ARMING_DELAY: 30,

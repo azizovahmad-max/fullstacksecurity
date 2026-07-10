@@ -1,12 +1,11 @@
-/* FullStack Security - sidebar panel/card (v2.10.0) */
+/* FullStack Security - sidebar panel/card (v2.11.0) */
 (() => {
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },
     vibration: { title: "Vibration sensors", icon: "mdi:vibrate" },
     flood: { title: "Flood / water leak sensors", icon: "mdi:water-alert" },
     sirens: { title: "Sirens", icon: "mdi:bullhorn" },
-    lights: { title: "Alarm lights (flash on trigger)", icon: "mdi:lightbulb-on" },
-    armed_lights: { title: "Status indicator lights (color by armed/disarmed state)", icon: "mdi:lightbulb-group" },
+    lights: { title: "Lights (status color + alarm flash)", icon: "mdi:lightbulb-group" },
     buttons: { title: "Buttons / remotes", icon: "mdi:gesture-double-tap" },
   };
 
@@ -63,8 +62,7 @@
       case "vibration": return on ? { text: "VIBRATION", cls: "alert" } : { text: "CLEAR", cls: "safe" };
       case "flood": return on ? { text: "WET", cls: "water" } : { text: "DRY", cls: "safe" };
       case "sirens": return on ? { text: "SOUNDING", cls: "alert" } : { text: "IDLE", cls: "idle" };
-      case "lights":
-      case "armed_lights": return on ? { text: "ON", cls: "warn" } : { text: "OFF", cls: "idle" };
+      case "lights": return on ? { text: "ON", cls: "warn" } : { text: "OFF", cls: "idle" };
       case "buttons": {
         if (s.entity_id.startsWith("event.")) {
           const t = s.attributes.event_type;
@@ -158,7 +156,6 @@
             ok = domain === "siren" || domain === "switch";
             break;
           case "lights":
-          case "armed_lights":
             ok = domain === "light";
             break;
           case "buttons": {
@@ -619,24 +616,8 @@
           </section>
 
           <section class="card">
-            <h2><ha-icon icon="mdi:lightbulb-alert"></ha-icon> Alarm lights (on trigger)</h2>
-            <p class="hint">The "Alarm lights" you added in Devices flash or change color when the alarm is triggered.</p>
-            <div class="grid2">
-              <div class="field"><label>Action when triggered</label>
-                <select id="f-light_mode">
-                  <option value="flash_long">Flash (long)</option>
-                  <option value="flash_short">Flash (short)</option>
-                  <option value="solid_red">Solid red</option>
-                  <option value="solid_white">Solid white</option>
-                </select>
-              </div>
-              <div class="field"><label>Duration (seconds, 0 = until disarmed)</label><input type="number" min="0" id="f-light_duration"></div>
-            </div>
-          </section>
-
-          <section class="card">
-            <h2><ha-icon icon="mdi:lightbulb-group"></ha-icon> Status indicator lights</h2>
-            <p class="hint">The "Status indicator lights" you added in Devices show a color for the current state — e.g. green when disarmed, red when armed.</p>
+            <h2><ha-icon icon="mdi:lightbulb-group"></ha-icon> Lights</h2>
+            <p class="hint">The lights you added in Devices do double duty: they show the system state by color (red armed, green disarmed) and react when the alarm is triggered.</p>
             <div class="grid2">
               <div class="field">
                 <label>Armed color</label>
@@ -661,6 +642,17 @@
               <input type="checkbox" id="f-arming_flash">
               Flash quickly during the exit delay, then go solid once armed
             </label>
+            <div class="grid2" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--fss-border);">
+              <div class="field"><label>Action when the alarm triggers</label>
+                <select id="f-light_mode">
+                  <option value="flash_long">Flash (long)</option>
+                  <option value="flash_short">Flash (short)</option>
+                  <option value="solid_red">Solid red</option>
+                  <option value="solid_white">Solid white</option>
+                </select>
+              </div>
+              <div class="field"><label>Trigger action duration (seconds, 0 = until disarmed)</label><input type="number" min="0" id="f-light_duration"></div>
+            </div>
           </section>
 
           <section class="card">

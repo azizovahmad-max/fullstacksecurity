@@ -26,7 +26,6 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_ARMED_LIGHT_COLOR,
-    CONF_ARMED_LIGHTS,
     CONF_ARMING_DELAY,
     CONF_ARMING_FLASH,
     CONF_DISARMED_LIGHT_COLOR,
@@ -151,7 +150,6 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._flood: list[str] = list(opt(options, CONF_FLOOD))
         self._sirens: list[str] = list(opt(options, CONF_SIRENS))
         self._lights: list[str] = list(opt(options, CONF_LIGHTS))
-        self._armed_lights: list[str] = list(opt(options, CONF_ARMED_LIGHTS))
         self._buttons: list[str] = list(opt(options, CONF_BUTTONS))
         self._mqtt_buttons: list[str] = list(opt(options, CONF_MQTT_BUTTONS))
 
@@ -323,11 +321,11 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
     def _start_arming_flash(self) -> None:
         """Flash the indicator bulbs (armed color / off) during the exit delay."""
         self._stop_arming_flash()
-        if not self._armed_lights:
+        if not self._lights:
             return
         _LOGGER.info(
             "Arming flash: blinking %s every %ss during exit delay",
-            self._armed_lights,
+            self._lights,
             ARMING_FLASH_SECONDS,
         )
         self._flash_on = False
@@ -340,7 +338,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             self._flash_on = not self._flash_on
             if self._flash_on:
                 data = {
-                    ATTR_ENTITY_ID: self._armed_lights,
+                    ATTR_ENTITY_ID: self._lights,
                     "rgb_color": _hex_to_rgb(self._armed_light_color),
                     "transition": 0,
                 }
@@ -352,7 +350,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
                     self.hass.services.async_call(
                         "light",
                         "turn_off",
-                        {ATTR_ENTITY_ID: self._armed_lights, "transition": 0},
+                        {ATTR_ENTITY_ID: self._lights, "transition": 0},
                         blocking=False,
                     )
                 )
@@ -457,7 +455,6 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             "flood": self._flood,
             "sirens": self._sirens,
             "lights": self._lights,
-            "armed_lights": self._armed_lights,
             "buttons": self._buttons,
             "mqtt_buttons": self._mqtt_buttons,
             "arming_delay": self._arming_delay,
@@ -673,7 +670,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         out: list[str] = []
         for e in (
             self._doors + self._vibration + self._flood + self._sirens
-            + self._lights + self._armed_lights + self._buttons
+            + self._lights + self._buttons
         ):
             if e not in seen:
                 seen.add(e)
@@ -807,7 +804,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self.async_write_ha_state()
         # During the exit delay: flash the indicator (if enabled), otherwise
         # switch it to solid armed color right away for immediate feedback.
-        if self._arming_flash and self._armed_lights:
+        if self._arming_flash and self._lights:
             self._start_arming_flash()
         else:
             await self._async_apply_indicator_lights(True)
@@ -836,7 +833,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
 
     async def _async_apply_indicator_lights(self, armed: bool) -> None:
         """Drive the indicator bulbs by state: armed color, disarmed color, or off."""
-        if not self._armed_lights:
+        if not self._lights:
             return
         if armed:
             await self._async_set_indicator_color(self._armed_light_color)
@@ -846,7 +843,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             await self.hass.services.async_call(
                 "homeassistant",
                 "turn_off",
-                {ATTR_ENTITY_ID: self._armed_lights},
+                {ATTR_ENTITY_ID: self._lights},
                 blocking=False,
             )
 
@@ -856,7 +853,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
                 "light",
                 "turn_on",
                 {
-                    ATTR_ENTITY_ID: self._armed_lights,
+                    ATTR_ENTITY_ID: self._lights,
                     "rgb_color": _hex_to_rgb(color),
                 },
                 blocking=False,
@@ -864,7 +861,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         except Exception as err:  # noqa: BLE001 - color support varies per bulb
             _LOGGER.warning("Indicator light color failed (%s), plain turn_on", err)
             await self.hass.services.async_call(
-                "light", "turn_on", {ATTR_ENTITY_ID: self._armed_lights}, blocking=False
+                "light", "turn_on", {ATTR_ENTITY_ID: self._lights}, blocking=False
             )
 
     async def async_alarm_disarm(
@@ -891,15 +888,9 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             await async_clear_notification(
                 self.hass, self._notify_services, NOTIFY_TAG_ALARM
             )
-            if self._lights:
-                await self.hass.services.async_call(
-                    "homeassistant",
-                    "turn_off",
-                    {ATTR_ENTITY_ID: self._lights},
-                    blocking=False,
-                )
         if was != AlarmControlPanelState.DISARMED:
-            # Indicator lights go to the disarmed color (or off) when disarmed.
+            # The lights stop whatever they were doing (alarm flash / armed
+            # color) and go to the disarmed color, or off.
             await self._async_apply_indicator_lights(False)
         if was != AlarmControlPanelState.DISARMED and self._notify_arm_disarm:
             await async_notify_all(
@@ -976,14 +967,11 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
 
                 @callback
                 def _lights_timeout(_now) -> None:
+                    # Flash window over: fall back to the solid armed/status
+                    # color while still triggered (same bulbs do both jobs).
                     if self._attr_alarm_state == AlarmControlPanelState.TRIGGERED:
                         self.hass.async_create_task(
-                            self.hass.services.async_call(
-                                "homeassistant",
-                                "turn_off",
-                                {ATTR_ENTITY_ID: self._lights},
-                                blocking=False,
-                            )
+                            self._async_apply_indicator_lights(True)
                         )
 
                 async_call_later(self.hass, self._light_duration, _lights_timeout)
