@@ -1,11 +1,11 @@
-/* FullStack Security - sidebar panel/card (v2.11.0) */
+/* FullStack Security - sidebar panel/card (v2.12.0) */
 (() => {
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },
     vibration: { title: "Vibration sensors", icon: "mdi:vibrate" },
     flood: { title: "Flood / water leak sensors", icon: "mdi:water-alert" },
     sirens: { title: "Sirens", icon: "mdi:bullhorn" },
-    lights: { title: "Lights (status color + alarm flash)", icon: "mdi:lightbulb-group" },
+    lights: { title: "Lights", icon: "mdi:lightbulb-group" },
     buttons: { title: "Buttons / remotes", icon: "mdi:gesture-double-tap" },
   };
 
@@ -275,6 +275,7 @@
           border-bottom: 3px solid transparent; white-space: nowrap;
         }
         .tabs button.active { opacity: 1; border-bottom-color: var(--app-header-text-color, #fff); }
+        .tabs button ha-icon { --mdc-icon-size: 15px; margin-right: 6px; vertical-align: -2px; }
         main { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }
         .view { display: none; }
         .view.active { display: block; }
@@ -293,6 +294,42 @@
           color: var(--secondary-text-color);
         }
         .card .hint { font-size: 13px; color: var(--secondary-text-color); margin: 0 0 14px; }
+
+        /* collapsible cards (Devices + Settings) */
+        details.acc { padding: 0; }
+        details.acc > summary {
+          display: flex; align-items: center; gap: 10px;
+          padding: 16px 20px; cursor: pointer; list-style: none; user-select: none;
+        }
+        details.acc > summary::-webkit-details-marker { display: none; }
+        details.acc > summary > ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); flex: none; }
+        .acc-title { flex: none; font-size: 14px; font-weight: 600; }
+        .acc-sub {
+          flex: 1; min-width: 0; font-size: 12px; color: var(--secondary-text-color);
+          text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .acc-sub .alerttext { color: var(--fss-red); font-weight: 700; }
+        .acc-sub .warntext { color: var(--fss-amber); font-weight: 700; }
+        .acc-sub .oktext { color: var(--fss-green); font-weight: 600; }
+        .acc-sub .dot { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:-1px; margin-left:2px; }
+        details.acc > summary .chev { transition: transform .2s; color: var(--secondary-text-color); }
+        details.acc[open] > summary .chev { transform: rotate(180deg); }
+        details.acc > .acc-body { padding: 0 20px 20px; }
+
+        /* dashboard system-devices strip */
+        .strip-row {
+          display: flex; align-items: center; gap: 12px;
+          padding: 11px 4px; border-bottom: 1px solid var(--fss-border); cursor: pointer;
+        }
+        .strip-row:last-child { border-bottom: none; }
+        .strip-row:hover .nm { color: var(--primary-color); }
+        .strip-row ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); flex: none; }
+        .strip-row .nm { flex: 1; min-width: 0; font-size: 14px; }
+        .strip-row .eid { display: block; font-size: 11px; color: var(--secondary-text-color); }
+        .linkbtn {
+          background: none; border: none; color: var(--primary-color); cursor: pointer;
+          font: inherit; font-size: 13px; font-weight: 600; padding: 10px 4px 0;
+        }
 
         /* hero */
         .hero { text-align: center; padding: 32px 20px 26px; position: relative; overflow: hidden; }
@@ -491,11 +528,11 @@
           <h1><ha-icon icon="mdi:shield-home"></ha-icon> Security</h1>
         </div>
         <div class="tabs">
-          <button data-tab="dashboard" class="active">Dashboard</button>
-          <button data-tab="devices">Devices</button>
-          <button data-tab="schedule">Schedule</button>
-          <button data-tab="health">Health</button>
-          <button data-tab="settings">Settings</button>
+          <button data-tab="dashboard" class="active"><ha-icon icon="mdi:view-dashboard-outline"></ha-icon>Dashboard</button>
+          <button data-tab="devices"><ha-icon icon="mdi:devices"></ha-icon>Devices</button>
+          <button data-tab="schedule"><ha-icon icon="mdi:calendar-clock"></ha-icon>Schedule</button>
+          <button data-tab="health"><ha-icon icon="mdi:heart-pulse"></ha-icon>Health</button>
+          <button data-tab="settings"><ha-icon icon="mdi:cog-outline"></ha-icon>Settings</button>
         </div>
       </header>
 
@@ -521,8 +558,12 @@
             <button id="main-btn">ARM SYSTEM</button>
           </section>
           <section class="card">
-            <h2><ha-icon icon="mdi:motion-sensor"></ha-icon> Live sensors</h2>
+            <h2><ha-icon icon="mdi:motion-sensor"></ha-icon> Security sensors</h2>
             <div id="sensor-grid"></div>
+          </section>
+          <section class="card">
+            <h2><ha-icon icon="mdi:devices"></ha-icon> System devices</h2>
+            <div id="device-strip"></div>
           </section>
           <section class="card">
             <h2><ha-icon icon="mdi:history"></ha-icon> Recent activity</h2>
@@ -531,32 +572,41 @@
         </div>
 
         <div class="view" id="view-devices">
+          <p class="hint" style="padding: 0 4px;">Tap a category to see its devices or add new ones.</p>
           ${Object.entries(LISTS).map(([key, meta]) => `
-            <section class="card">
-              <h2><ha-icon icon="${meta.icon}"></ha-icon> ${meta.title}</h2>
-              <div data-devlist="${key}"></div>
-              <div class="addrow">
-                <select data-addsel="${key}"><option value="">Select an entity…</option></select>
-                <button data-addbtn="${key}">ADD</button>
-              </div>
-              ${key === "buttons" ? `
-              <div class="mqtt-block">
-                <div class="mqtt-title"><ha-icon icon="mdi:zigbee"></ha-icon> zigbee2mqtt button (recommended)</div>
-                <p class="hint">Many zigbee buttons (e.g. TS004F) never create an entity — they only send presses over MQTT. Add yours by its exact zigbee2mqtt device name.</p>
-                <div data-mqttlist></div>
+            <details class="card acc" data-acc="${key}">
+              <summary>
+                <ha-icon icon="${meta.icon}"></ha-icon>
+                <span class="acc-title">${meta.title}</span>
+                <span class="acc-sub" data-devsum="${key}"></span>
+                <ha-icon class="chev" icon="mdi:chevron-down"></ha-icon>
+              </summary>
+              <div class="acc-body">
+                ${key === "lights" ? `<p class="hint">These bulbs show the status color (red armed / green disarmed) and react when the alarm triggers — colors and actions are in Settings.</p>` : ""}
+                <div data-devlist="${key}"></div>
                 <div class="addrow">
-                  <input type="text" id="mqtt-btn-input" placeholder="z2m name, e.g. SecuritySwitch">
-                  <button id="mqtt-btn-add">ADD</button>
+                  <select data-addsel="${key}"><option value="">Select an entity…</option></select>
+                  <button data-addbtn="${key}">ADD</button>
                 </div>
+                ${key === "buttons" ? `
+                <div class="mqtt-block">
+                  <div class="mqtt-title"><ha-icon icon="mdi:zigbee"></ha-icon> zigbee2mqtt button (recommended)</div>
+                  <p class="hint">Many zigbee buttons (e.g. TS004F) never create an entity — they only send presses over MQTT. Add yours by its exact zigbee2mqtt device name.</p>
+                  <div data-mqttlist></div>
+                  <div class="addrow">
+                    <input type="text" id="mqtt-btn-input" placeholder="z2m name, e.g. SecuritySwitch">
+                    <button id="mqtt-btn-add">ADD</button>
+                  </div>
+                </div>
+                <details class="adv">
+                  <summary>Advanced: add by entity id</summary>
+                  <div class="addrow" style="margin-top:10px;">
+                    <input type="text" data-manual="${key}" placeholder="e.g. sensor.remote_action">
+                    <button data-manualbtn="${key}">ADD ID</button>
+                  </div>
+                </details>` : ""}
               </div>
-              <details class="adv">
-                <summary>Advanced: add by entity id</summary>
-                <div class="addrow" style="margin-top:10px;">
-                  <input type="text" data-manual="${key}" placeholder="e.g. sensor.remote_action">
-                  <button data-manualbtn="${key}">ADD ID</button>
-                </div>
-              </details>` : ""}
-            </section>`).join("")}
+            </details>`).join("")}
         </div>
 
         <div class="view" id="view-schedule">
@@ -594,29 +644,50 @@
         </div>
 
         <div class="view" id="view-settings">
-          <section class="card">
-            <h2><ha-icon icon="mdi:timer-outline"></ha-icon> Timing</h2>
-            <p class="hint">Exit delay gives you time to leave. Entry delay gives you time to disarm before the sirens fire.</p>
-            <div class="grid2">
-              <div class="field"><label>Exit delay (seconds)</label><input type="number" min="0" id="f-arming_delay"></div>
-              <div class="field"><label>Entry delay (seconds)</label><input type="number" min="0" id="f-entry_delay"></div>
+          <p class="hint" style="padding: 0 4px;">Tap a section to edit, then hit Save at the bottom.</p>
+          <details class="card acc">
+            <summary>
+              <ha-icon icon="mdi:timer-outline"></ha-icon>
+              <span class="acc-title">Timing</span>
+              <span class="acc-sub" id="sum-timing"></span>
+              <ha-icon class="chev" icon="mdi:chevron-down"></ha-icon>
+            </summary>
+            <div class="acc-body">
+              <p class="hint">Exit delay gives you time to leave. Entry delay gives you time to disarm before the sirens fire.</p>
+              <div class="grid2">
+                <div class="field"><label>Exit delay (seconds)</label><input type="number" min="0" id="f-arming_delay"></div>
+                <div class="field"><label>Entry delay (seconds)</label><input type="number" min="0" id="f-entry_delay"></div>
+              </div>
             </div>
-          </section>
+          </details>
 
-          <section class="card">
-            <h2><ha-icon icon="mdi:bullhorn"></ha-icon> Siren</h2>
-            <div class="grid2">
-              <div class="field"><label>Preset sound / tone</label><select id="f-siren_tone"><option value="">Default</option></select></div>
-              <div class="field"><label>Duration (seconds, 0 = until disarmed)</label><input type="number" min="0" id="f-siren_duration"></div>
+          <details class="card acc">
+            <summary>
+              <ha-icon icon="mdi:bullhorn"></ha-icon>
+              <span class="acc-title">Siren</span>
+              <span class="acc-sub" id="sum-siren"></span>
+              <ha-icon class="chev" icon="mdi:chevron-down"></ha-icon>
+            </summary>
+            <div class="acc-body">
+              <div class="grid2">
+                <div class="field"><label>Preset sound / tone</label><select id="f-siren_tone"><option value="">Default</option></select></div>
+                <div class="field"><label>Duration (seconds, 0 = until disarmed)</label><input type="number" min="0" id="f-siren_duration"></div>
+              </div>
+              <div class="field" style="margin-top:14px;">
+                <label>Volume: <span id="volume-label">100%</span></label>
+                <input type="range" min="0" max="100" step="5" id="f-siren_volume">
+              </div>
             </div>
-            <div class="field" style="margin-top:14px;">
-              <label>Volume: <span id="volume-label">100%</span></label>
-              <input type="range" min="0" max="100" step="5" id="f-siren_volume">
-            </div>
-          </section>
+          </details>
 
-          <section class="card">
-            <h2><ha-icon icon="mdi:lightbulb-group"></ha-icon> Lights</h2>
+          <details class="card acc">
+            <summary>
+              <ha-icon icon="mdi:lightbulb-group"></ha-icon>
+              <span class="acc-title">Lights</span>
+              <span class="acc-sub" id="sum-lights"></span>
+              <ha-icon class="chev" icon="mdi:chevron-down"></ha-icon>
+            </summary>
+            <div class="acc-body">
             <p class="hint">The lights you added in Devices do double duty: they show the system state by color (red armed, green disarmed) and react when the alarm is triggered.</p>
             <div class="grid2">
               <div class="field">
@@ -653,31 +724,52 @@
               </div>
               <div class="field"><label>Trigger action duration (seconds, 0 = until disarmed)</label><input type="number" min="0" id="f-light_duration"></div>
             </div>
-          </section>
-
-          <section class="card">
-            <h2><ha-icon icon="mdi:water-alert"></ha-icon> Flood protection</h2>
-            <p class="hint">Flood sensors are monitored 24/7, even when the system is disarmed. Alerts always go to your phones.</p>
-            <label class="checkline"><input type="checkbox" id="f-flood_siren"> Sound the sirens on a water leak</label>
-          </section>
-
-          <section class="card">
-            <h2><ha-icon icon="mdi:gesture-double-tap"></ha-icon> Button actions</h2>
-            <div class="grid2">
-              ${["single", "double", "triple", "hold"].map((p) => `
-                <div class="field"><label>${p[0].toUpperCase() + p.slice(1)} press</label>
-                  <select id="f-button_${p}">
-                    <option value="arm">Arm system</option>
-                    <option value="disarm">Disarm system</option>
-                    <option value="toggle">Toggle arm/disarm</option>
-                    <option value="none">Do nothing</option>
-                  </select>
-                </div>`).join("")}
             </div>
-          </section>
+          </details>
 
-          <section class="card">
-            <h2><ha-icon icon="mdi:cellphone-message"></ha-icon> Phone notifications</h2>
+          <details class="card acc">
+            <summary>
+              <ha-icon icon="mdi:water-alert"></ha-icon>
+              <span class="acc-title">Flood protection</span>
+              <span class="acc-sub" id="sum-flood"></span>
+              <ha-icon class="chev" icon="mdi:chevron-down"></ha-icon>
+            </summary>
+            <div class="acc-body">
+              <p class="hint">Flood sensors are monitored 24/7, even when the system is disarmed. Alerts always go to your phones.</p>
+              <label class="checkline"><input type="checkbox" id="f-flood_siren"> Sound the sirens on a water leak</label>
+            </div>
+          </details>
+
+          <details class="card acc">
+            <summary>
+              <ha-icon icon="mdi:gesture-double-tap"></ha-icon>
+              <span class="acc-title">Button actions</span>
+              <span class="acc-sub" id="sum-buttons"></span>
+              <ha-icon class="chev" icon="mdi:chevron-down"></ha-icon>
+            </summary>
+            <div class="acc-body">
+              <div class="grid2">
+                ${["single", "double", "triple", "hold"].map((p) => `
+                  <div class="field"><label>${p[0].toUpperCase() + p.slice(1)} press</label>
+                    <select id="f-button_${p}">
+                      <option value="arm">Arm system</option>
+                      <option value="disarm">Disarm system</option>
+                      <option value="toggle">Toggle arm/disarm</option>
+                      <option value="none">Do nothing</option>
+                    </select>
+                  </div>`).join("")}
+              </div>
+            </div>
+          </details>
+
+          <details class="card acc">
+            <summary>
+              <ha-icon icon="mdi:cellphone-message"></ha-icon>
+              <span class="acc-title">Phone notifications</span>
+              <span class="acc-sub" id="sum-notify"></span>
+              <ha-icon class="chev" icon="mdi:chevron-down"></ha-icon>
+            </summary>
+            <div class="acc-body">
             <p class="hint">Sent when the alarm triggers, a leak is detected, or arming fails.</p>
             <div id="notify-list"></div>
             <label class="checkline" style="border-top:1px solid var(--fss-border); margin-top:8px; padding-top:14px;">
@@ -692,10 +784,17 @@
               can tap right on the phone. A sensor dropping offline while the
               system is armed alerts you immediately.
             </p>
-          </section>
+            </div>
+          </details>
 
-          <section class="card">
-            <h2><ha-icon icon="mdi:heart-pulse"></ha-icon> Device health alerts</h2>
+          <details class="card acc">
+            <summary>
+              <ha-icon icon="mdi:heart-pulse"></ha-icon>
+              <span class="acc-title">Device health alerts</span>
+              <span class="acc-sub" id="sum-health"></span>
+              <ha-icon class="chev" icon="mdi:chevron-down"></ha-icon>
+            </summary>
+            <div class="acc-body">
             <p class="hint">Automatically checks every device for low battery or offline status at the times below and notifies the phones ticked above so you can fix issues in time.</p>
             <label class="checkline" style="margin-bottom:6px;">
               <input type="checkbox" id="f-health_check_enabled"> Enable automatic health checks
@@ -721,7 +820,8 @@
               <input type="number" min="1" max="100" id="f-health_battery_threshold" value="20">
             </div>
             <button id="health-test-btn" class="add-btn" style="margin-top:14px;">Send a test health report now</button>
-          </section>
+            </div>
+          </details>
 
           <button id="save-btn" class="save-btn">SAVE SETTINGS</button>
         </div>
@@ -741,6 +841,17 @@
       );
 
       this.$("#main-btn").addEventListener("click", () => this._mainAction());
+
+      // Dashboard: expand/collapse activity, jump to Devices from the strip.
+      this.$("#history-list").addEventListener("click", (e) => {
+        if (e.target.closest("#hist-more")) {
+          this._histAll = !this._histAll;
+          this._renderHistory();
+        }
+      });
+      this.$("#device-strip").addEventListener("click", (e) => {
+        if (e.target.closest("[data-goto]")) this._switchTab("devices");
+      });
 
       // Devices view: add / remove via delegation.
       this.$("#view-devices").addEventListener("click", (e) => {
@@ -951,6 +1062,7 @@
       this._renderHero(alarm);
       this._renderFloodBanner();
       this._renderSensorGrid();
+      this._renderDeviceStrip();
       this._renderHistory();
 
       const sig = JSON.stringify(CONFIG_ATTRS.map((k) => this._attrs()[k]));
@@ -1079,27 +1191,62 @@
     }
 
     _renderSensorGrid() {
+      // Dashboard shows the sensors that can trigger something; sirens,
+      // lights and buttons live in the compact System devices strip below.
       const grid = this.$("#sensor-grid");
       let html = "";
-      for (const key of Object.keys(LISTS)) {
+      for (const key of ["doors", "vibration", "flood"]) {
         const items = this._configured(key);
         if (!items.length) continue;
         html += `<div class="group-label">${LISTS[key].title}</div>`;
         html += items.map((e) => this._rowHtml(key, e, false)).join("");
       }
       grid.innerHTML = html ||
-        `<div class="empty">No devices yet — add your sensors, sirens and buttons in the Devices tab.</div>`;
+        `<div class="empty">No sensors yet — add door, vibration and flood sensors in the Devices tab.</div>`;
+    }
+
+    _renderDeviceStrip() {
+      // One compact row per output category; tap to jump to Devices.
+      const strip = this.$("#device-strip");
+      let html = "";
+      for (const key of ["sirens", "lights", "buttons"]) {
+        const items = this._configured(key);
+        const mqtt = key === "buttons" ? (this._attrs().mqtt_buttons || []) : [];
+        const total = items.length + mqtt.length;
+        if (!total) continue;
+        const offline = items.filter((e) => {
+          const s = this._hass.states[e];
+          return !s || s.state === "unavailable";
+        }).length;
+        const active = items.filter((e) => {
+          const s = this._hass.states[e];
+          return s && s.state === "on";
+        }).length;
+        let pill;
+        if (offline) pill = `<span class="pill warn static">${offline} OFFLINE</span>`;
+        else if (key === "sirens" && active) pill = `<span class="pill alert">SOUNDING</span>`;
+        else pill = `<span class="pill safe static">OK</span>`;
+        html += `
+          <div class="strip-row" data-goto="devices">
+            <ha-icon icon="${LISTS[key].icon}"></ha-icon>
+            <span class="nm">${LISTS[key].title}<span class="eid">${total} device${total === 1 ? "" : "s"}</span></span>
+            ${pill}
+          </div>`;
+      }
+      strip.innerHTML = html ||
+        `<div class="empty">No sirens, lights or buttons yet — add them in the Devices tab.</div>`;
     }
 
     _renderHistory() {
-      const hist = (this._attrs().history || []).slice(-10).reverse();
+      const all = (this._attrs().history || []).slice().reverse();
+      const hist = this._histAll ? all : all.slice(0, 6);
       const fmt = (t) => {
         const d = new Date(t);
         return isNaN(d) ? "" : d.toLocaleString([], {
           month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
         });
       };
-      this.$("#history-list").innerHTML = hist.length
+      let html = hist.length
         ? hist.map((h) => `
             <div class="hist-row">
               <ha-icon icon="${HISTORY_ICONS[h.i] || "mdi:information-outline"}"></ha-icon>
@@ -1107,6 +1254,10 @@
               <span class="what">${h.m}</span>
             </div>`).join("")
         : `<div class="empty">No activity yet.</div>`;
+      if (all.length > 6) {
+        html += `<button class="linkbtn" id="hist-more">${this._histAll ? "Show less" : `Show all (${all.length})`}</button>`;
+      }
+      this.$("#history-list").innerHTML = html;
     }
 
     _renderDeviceLists() {
@@ -1116,6 +1267,27 @@
         el.innerHTML = items.length
           ? items.map((e) => this._rowHtml(key, e, true)).join("")
           : `<div class="empty">Nothing added yet.</div>`;
+
+        // Summary in the collapsed header: count + any problems.
+        const sum = this.$(`[data-devsum="${key}"]`);
+        if (sum) {
+          const mqtt = key === "buttons" ? (this._attrs().mqtt_buttons || []).length : 0;
+          const total = items.length + mqtt;
+          const offline = items.filter((e) => {
+            const s = this._hass.states[e];
+            return !s || s.state === "unavailable";
+          }).length;
+          const open = ["doors", "vibration", "flood"].includes(key)
+            ? items.filter((e) => {
+                const s = this._hass.states[e];
+                return s && s.state === "on";
+              }).length
+            : 0;
+          let extra = "";
+          if (offline) extra = ` · <span class="alerttext">${offline} offline</span>`;
+          else if (open) extra = ` · <span class="warntext">${open} open</span>`;
+          sum.innerHTML = total ? `${total} added${extra}` : "none yet";
+        }
       }
       this._renderMqttButtons();
     }
@@ -1255,6 +1427,29 @@
       this.$$("#f-health_days input[type=checkbox]").forEach(cb => {
           cb.checked = days.includes(cb.value);
       });
+
+      // One-line summaries for the collapsed section headers.
+      const sum = (id, html) => { const el = this.$(id); if (el) el.innerHTML = html; };
+      const exit = a.arming_delay !== undefined ? a.arming_delay : 30;
+      const entry = a.entry_delay !== undefined ? a.entry_delay : 30;
+      sum("#sum-timing", `exit ${exit}s · entry ${entry}s`);
+      const vol = a.siren_volume !== undefined ? a.siren_volume : 100;
+      const dur = a.siren_duration ? `${a.siren_duration}s` : "until disarmed";
+      sum("#sum-siren", `${a.siren_tone || "default tone"} · ${vol}% · ${dur}`);
+      const swatch = (c) => `<span class="dot" style="background:${c}"></span>`;
+      sum("#sum-lights",
+        `armed ${swatch(a.armed_light_color || "#ff0000")} · disarmed ` +
+        (a.disarmed_lights_on ? swatch(a.disarmed_light_color || "#00c800") : "off") +
+        (a.arming_flash ? " · flash" : ""));
+      sum("#sum-flood", a.flood_siren !== false ? "siren on leak" : "notify only");
+      sum("#sum-buttons", `single: ${a.button_single || "arm"} · double: ${a.button_double || "disarm"}`);
+      const phones = (a.notify_services || []).length;
+      sum("#sum-notify",
+        `${phones} phone${phones === 1 ? "" : "s"}` +
+        (a.critical_alerts !== false ? ` · <span class="oktext">critical on</span>` : " · critical off"));
+      sum("#sum-health", a.health_check_enabled
+        ? `<span class="oktext">on</span> · ${times.filter(Boolean).join(" & ") || "09:00"} · &lt;${a.health_battery_threshold !== undefined ? a.health_battery_threshold : 20}% battery`
+        : "off");
 
       // Siren tones from the configured sirens.
       const tones = new Set();
