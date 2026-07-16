@@ -1,4 +1,4 @@
-/* FullStack Security - sidebar panel/card (v2.13.0) */
+/* FullStack Security - sidebar panel/card (v2.14.0) */
 (() => {
   const LISTS = {
     doors: { title: "Door / Window sensors", icon: "mdi:door" },
@@ -139,6 +139,27 @@
     }[char]));
   }
 
+  function sirenControlScore(sirenId, sirenState, controlId, controlState) {
+    const controlText = `${controlId} ${controlState.attributes.friendly_name || ""}`.toLowerCase();
+    if (!/alarm|sound|tone|melody|ring|chime|siren/.test(controlText)) return 0;
+    const ignored = new Set([
+      "alarm", "sound", "tone", "melody", "ring", "ringtone", "chime",
+      "siren", "mode", "select", "control", "device", "zigbee",
+    ]);
+    const tokens = (value) => new Set(String(value).toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length > 2 && !ignored.has(token)));
+    const sirenTokens = tokens(`${sirenId} ${sirenState.attributes.friendly_name || ""}`);
+    const controlTokens = tokens(controlText);
+    let score = 0;
+    for (const token of sirenTokens) {
+      if (controlTokens.has(token)) score += 2;
+    }
+    const sirenObject = (sirenId.split(".")[1] || "").toLowerCase();
+    if (sirenObject.length > 3 && controlText.includes(sirenObject)) score += 3;
+    return score;
+  }
+
   class FullStackSecurityPanel extends HTMLElement {
     constructor() {
       super();
@@ -152,6 +173,7 @@
       this._entityRegistry = [];
       this._areaZonesLoaded = false;
       this._areaZonesPromise = null;
+      this._discoveredDevices = [];
     }
 
     set hass(hass) {
@@ -544,6 +566,17 @@
         .discover-card h2 { margin-bottom: 4px; }
         .discover-card .hint { margin: 0; }
         .discover-card .add-btn { width: auto; flex: none; padding: 12px 16px; }
+        #discovery-results[hidden] { display: none; }
+        .discovery-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+        .discovery-head h2 { flex: 1; margin: 0; }
+        .discovery-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--fss-border); cursor: pointer; }
+        .discovery-row input { width: auto; accent-color: var(--primary-color); flex: none; }
+        .discovery-row ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); flex: none; }
+        .discovery-row .nm { flex: 1; min-width: 0; font-size: 14px; }
+        .discovery-row .eid { display: block; font-size: 11px; color: var(--secondary-text-color); overflow: hidden; text-overflow: ellipsis; }
+        .discovery-row .kind { font-size: 11px; color: var(--secondary-text-color); text-transform: uppercase; flex: none; }
+        .discovery-actions { display: flex; gap: 10px; margin-top: 14px; }
+        .discovery-actions .add-btn { flex: 1; }
         .edit { background: none; border: none; cursor: pointer; flex: none; color: var(--secondary-text-color); padding: 6px; border-radius: 50%; display: flex; }
         .edit:hover { color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 12%, transparent); }
         .edit ha-icon { --mdc-icon-size: 18px; color: inherit; }
@@ -684,9 +717,22 @@
             <ha-icon icon="mdi:radar"></ha-icon>
             <div class="discover-copy">
               <h2>Discover security devices</h2>
-              <p class="hint">Adds door, motion, vibration, water, siren and remote entities it can safely identify. Home Assistant Areas become zones.</p>
+              <p class="hint">Scans door, motion, vibration, water, siren and remote entities. Review and choose what to add; Home Assistant Areas become zones.</p>
             </div>
-            <button id="discover-btn" class="add-btn">DISCOVER</button>
+            <button id="discover-btn" class="add-btn">SCAN</button>
+          </section>
+          <section class="card" id="discovery-results" hidden>
+            <div class="discovery-head">
+              <ha-icon icon="mdi:playlist-check"></ha-icon>
+              <h2>Discovered devices</h2>
+              <span class="pill idle static" id="discovery-count">0 found</span>
+            </div>
+            <p class="hint">Nothing is added until you select devices and confirm below.</p>
+            <div id="discovery-list"></div>
+            <div class="discovery-actions">
+              <button id="add-discovered-btn" class="add-btn" disabled>ADD SELECTED</button>
+              <button id="clear-discovery-btn" class="add-btn">CLEAR</button>
+            </div>
           </section>
           <p class="hint" style="padding: 0 4px;">Tap a category to see its devices or add new ones.</p>
           ${Object.entries(LISTS).map(([key, meta]) => `
@@ -780,7 +826,7 @@
           <details class="card acc">
             <summary>
               <ha-icon icon="mdi:bullhorn"></ha-icon>
-              <span class="acc-title">Siren</span>
+              <span class="acc-title">Siren sounds &amp; modes</span>
               <span class="acc-sub" id="sum-siren"></span>
               <ha-icon class="chev" icon="mdi:chevron-down"></ha-icon>
             </summary>
@@ -967,6 +1013,15 @@
         if (e.target.closest("[data-goto]")) this._switchTab("devices");
       });
       this.$("#discover-btn").addEventListener("click", () => this._discoverDevices());
+      this.$("#add-discovered-btn").addEventListener("click", () => this._addDiscoveredDevices());
+      this.$("#clear-discovery-btn").addEventListener("click", () => {
+        this._discoveredDevices = [];
+        this._renderDiscoveryResults();
+      });
+      this.$("#discovery-list").addEventListener("change", () => {
+        const selected = this.$$('[data-discovered-device]:checked').length;
+        this.$("#add-discovered-btn").disabled = selected === 0;
+      });
 
       // Devices view: add / remove via delegation.
       this.$("#view-devices").addEventListener("click", (e) => {
@@ -1125,12 +1180,10 @@
       button.disabled = true;
       try {
         await this._loadAreaZones();
-        const devices = { doors: [], vibration: [], flood: [], sirens: [], buttons: [] };
         const existing = new Set(
           Object.keys(LISTS).flatMap((key) => this._configured(key))
         );
-        const zones = {};
-        const newEntities = [];
+        const found = [];
 
         for (const [entityId, state] of Object.entries(this._hass.states)) {
           let listKey = ["doors", "vibration", "flood", "sirens", "buttons"]
@@ -1139,23 +1192,70 @@
           // would pull in unrelated plugs and relays. Those remain manual.
           if (listKey === "sirens" && entityId.startsWith("switch.")) listKey = undefined;
           if (!listKey || existing.has(entityId)) continue;
-          devices[listKey].push(entityId);
-          zones[entityId] = this._zoneFor(entityId);
-          newEntities.push(entityId);
+          found.push({ entityId, listKey, zone: this._zoneFor(entityId) });
         }
 
-        if (!newEntities.length) {
+        this._discoveredDevices = found.sort((a, b) =>
+          a.zone.localeCompare(b.zone) || this._name(a.entityId).localeCompare(this._name(b.entityId))
+        );
+        this._renderDiscoveryResults();
+        if (!found.length) {
           this._toast("All discovered security devices are already added");
           return;
         }
-        await this._hass.callService("fullstacksecurity", "update_config", {
-          action: "discover", devices, zones,
-        });
-        this._toast(`Added ${newEntities.length} security device${newEntities.length === 1 ? "" : "s"}`);
+        this._toast(`Found ${found.length} device${found.length === 1 ? "" : "s"} - select what to add`);
       } catch (err) {
         this._toast(`Discovery failed: ${err.message || err}`, false);
       } finally {
         button.disabled = false;
+      }
+    }
+
+    _renderDiscoveryResults() {
+      const section = this.$("#discovery-results");
+      const list = this.$("#discovery-list");
+      const devices = this._discoveredDevices || [];
+      section.hidden = devices.length === 0;
+      this.$("#discovery-count").textContent = `${devices.length} found`;
+      this.$("#add-discovered-btn").disabled = true;
+      list.innerHTML = devices.map((device) => `
+        <label class="discovery-row">
+          <input type="checkbox" data-discovered-device="${device.entityId}">
+          <ha-icon icon="${LISTS[device.listKey].icon}"></ha-icon>
+          <span class="nm">${escapeHtml(this._name(device.entityId))}<span class="eid">${escapeHtml(device.zone)} · ${escapeHtml(device.entityId)}</span></span>
+          <span class="kind">${escapeHtml(LISTS[device.listKey].title)}</span>
+        </label>`).join("");
+    }
+
+    async _addDiscoveredDevices() {
+      const selectedIds = new Set(
+        this.$$('[data-discovered-device]:checked').map((input) => input.dataset.discoveredDevice)
+      );
+      const selected = this._discoveredDevices.filter((device) => selectedIds.has(device.entityId));
+      if (!selected.length) {
+        this._toast("Select at least one device", false);
+        return;
+      }
+      const button = this.$("#add-discovered-btn");
+      button.disabled = true;
+      const devices = { doors: [], vibration: [], flood: [], sirens: [], buttons: [] };
+      const zones = {};
+      for (const device of selected) {
+        devices[device.listKey].push(device.entityId);
+        zones[device.entityId] = device.zone;
+      }
+      try {
+        await this._hass.callService("fullstacksecurity", "update_config", {
+          action: "discover", devices, zones,
+        });
+        this._discoveredDevices = this._discoveredDevices.filter(
+          (device) => !selectedIds.has(device.entityId)
+        );
+        this._renderDiscoveryResults();
+        this._toast(`Added ${selected.length} security device${selected.length === 1 ? "" : "s"}`);
+      } catch (err) {
+        button.disabled = false;
+        this._toast(`Add failed: ${err.message || err}`, false);
       }
     }
 
@@ -1604,26 +1704,64 @@
 
     /* ----------------------------------------------------------- settings */
 
+    _sirenSelectControl(entityId) {
+      const state = this._hass.states[entityId];
+      const options = state && state.attributes ? state.attributes.options : null;
+      if (!state || !Array.isArray(options) || !options.length) return null;
+      const normalized = options.map((option) => String(option));
+      const current = String(state.state || "");
+      if (current && !["unknown", "unavailable"].includes(current) && !normalized.includes(current)) {
+        normalized.unshift(current);
+      }
+      return {
+        entityId,
+        name: state.attributes.friendly_name || entityId,
+        state: current,
+        options: normalized,
+      };
+    }
+
+    _allSirenModeSelects() {
+      return Object.keys(this._hass.states)
+        .filter((entityId) => entityId.startsWith("select."))
+        .map((entityId) => this._sirenSelectControl(entityId))
+        .filter((control) => control && /alarm|sound|tone|melody|ring|chime|siren/.test(
+          `${control.entityId} ${control.name}`.toLowerCase()
+        ));
+    }
+
     _nativeSirenSelects(sirenId) {
+      const sirenState = this._hass.states[sirenId];
+      if (!sirenState) return [];
+      const related = new Set();
       const sirenRegistryEntry = this._entityRegistry.find(
         (entry) => entry.entity_id === sirenId
       );
-      if (!sirenRegistryEntry || !sirenRegistryEntry.device_id) return [];
-      return this._entityRegistry
-        .filter((entry) => entry.device_id === sirenRegistryEntry.device_id &&
-          entry.entity_id.startsWith("select."))
-        .map((entry) => {
-          const state = this._hass.states[entry.entity_id];
-          const options = state && state.attributes ? state.attributes.options : null;
-          return Array.isArray(options) && options.length ? {
-            entityId: entry.entity_id,
-            name: (state.attributes && state.attributes.friendly_name) || entry.name || entry.entity_id,
-            state: state.state,
-            options,
-          } : null;
-        })
+      if (sirenRegistryEntry && sirenRegistryEntry.device_id) {
+        this._entityRegistry
+          .filter((entry) => entry.device_id === sirenRegistryEntry.device_id &&
+            entry.entity_id.startsWith("select."))
+          .forEach((entry) => related.add(entry.entity_id));
+      }
+      for (const control of this._allSirenModeSelects()) {
+        if (sirenControlScore(sirenId, sirenState, control.entityId, this._hass.states[control.entityId]) > 0) {
+          related.add(control.entityId);
+        }
+      }
+      return [...related]
+        .map((entityId) => this._sirenSelectControl(entityId))
         .filter(Boolean)
         .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    _nativeSirenControlHtml(control) {
+      return `
+        <div class="field">
+          <label>${escapeHtml(control.name)}</label>
+          <select data-native-siren-select="${control.entityId}" data-current="${escapeHtml(control.state)}">
+            ${control.options.map((option) => `<option value="${escapeHtml(option)}" ${option === control.state ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}
+          </select>
+        </div>`;
     }
 
     _renderSirenControls() {
@@ -1637,9 +1775,8 @@
         container.innerHTML = `<div class="empty">Add a siren in Devices to choose its sound modes.</div>`;
         return;
       }
-      container.innerHTML = `
-        <p class="hint">Each siren keeps its own alarm sound. Device mode selectors update the siren immediately; choose an alarm sound below, then save settings.</p>
-        ${sirens.map((sirenId) => {
+      const linkedControlIds = new Set();
+      const sirenCards = sirens.map((sirenId) => {
           const state = this._hass.states[sirenId];
           const tones = toneOptions(state && state.attributes && state.attributes.available_tones);
           const selected = selectedTones[sirenId] || "";
@@ -1657,22 +1794,28 @@
               </select>
             </div>` : `
             <div class="field"><label>Alarm sound</label><div class="siren-note">This entity does not publish a tone list.</div></div>`;
-          const nativeControls = this._nativeSirenSelects(sirenId).map((control) => `
-            <div class="field">
-              <label>${escapeHtml(control.name)}</label>
-              <select data-native-siren-select="${control.entityId}" data-current="${escapeHtml(control.state)}">
-                ${control.options.map((option) => `<option value="${escapeHtml(option)}" ${option === control.state ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}
-              </select>
-            </div>`).join("");
+          const nativeControls = this._nativeSirenSelects(sirenId);
+          nativeControls.forEach((control) => linkedControlIds.add(control.entityId));
           const reported = reportedTone ? `Current tone reported by the siren: ${reported}` :
             "Current tone is shown when this siren integration reports it.";
           return `
             <div class="siren-control">
               <div class="siren-name"><ha-icon icon="mdi:bullhorn"></ha-icon>${escapeHtml(this._name(sirenId))}</div>
-              <div class="grid2">${toneControl}${nativeControls}</div>
+              <div class="grid2">${toneControl}${nativeControls.map((control) => this._nativeSirenControlHtml(control)).join("")}</div>
               <p class="siren-note">${escapeHtml(reported)}</p>
             </div>`;
-        }).join("")}`;
+        });
+      const unlinkedControls = this._allSirenModeSelects()
+        .filter((control) => !linkedControlIds.has(control.entityId));
+      const unmatchedCard = unlinkedControls.length ? `
+        <div class="siren-control">
+          <div class="siren-name"><ha-icon icon="mdi:tune-variant"></ha-icon>Other siren sound and mode controls</div>
+          <div class="grid2">${unlinkedControls.map((control) => this._nativeSirenControlHtml(control)).join("")}</div>
+          <p class="siren-note">Home Assistant exposes these sound controls but did not link them to a configured siren. They still update immediately.</p>
+        </div>` : "";
+      container.innerHTML = `
+        <p class="hint">Each siren keeps its own alarm sound. Device mode selectors update the siren immediately; choose an alarm sound below, then save settings.</p>
+        ${sirenCards.join("")}${unmatchedCard}`;
     }
 
     _populateSettings() {
