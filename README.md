@@ -19,8 +19,12 @@ automations to write.
   zigbee2mqtt `*_action` sensors, **and buttons that only publish over MQTT**
   (e.g. TS004F) — add those by their zigbee2mqtt device name and the plugin
   subscribes to `zigbee2mqtt/<name>` directly, no entity required
-- 📢 **Sirens** with preset sound/tone, duration and volume (real `siren`
-  entities and switch-based sirens both supported)
+- 📢 **Per-siren sound controls** — each real siren gets its own available
+  tone list and any native Zigbee sound/mode selectors, with its chosen tone
+  used when the system alarms (switch-based sirens are also supported)
+- 📡 **Automatic discovery and zones** — finds relevant door, motion,
+  vibration, water, siren and remote entities, then groups them by their Home
+  Assistant Area; devices can also have a Security-only display name
 - 🚦 **Lights that do double duty** — the same bulbs show the system state
   by color (pick-your-own **armed color**, default red, and optionally a
   **disarmed color**, default green — or off when disarmed), optionally
@@ -80,12 +84,15 @@ Copy `custom_components/fullstacksecurity` into your Home Assistant
 1. **Settings → Devices & Services → Add Integration → FullStack Security**
    (one click, no options — everything is configured in the panel)
 2. A **Security** item appears in the sidebar
-3. Open it → **Devices** tab → add your door sensors, vibration sensors,
-   flood sensors, sirens, lights and buttons from the dropdowns. For a
-   zigbee button that doesn't appear in the dropdown, use the **zigbee2mqtt
+3. Open it → **Devices** tab → use **Discover** to add recognizable security
+   devices and assign their Home Assistant Areas as zones. You can rename a
+   configured device with its pencil button, or add door sensors, vibration
+   sensors, flood sensors, sirens, lights and buttons individually from the
+   dropdowns. For a zigbee button that doesn't appear in the dropdown, use the **zigbee2mqtt
    button** box in the Buttons section and type its exact z2m device name
    (the name shown in the zigbee2mqtt frontend, e.g. `SecuritySwitch`)
-4. **Settings** tab → set delays, siren tone/volume/duration, light actions,
+4. **Settings** tab → set delays, the individual siren sounds/modes,
+   volume/duration, light actions,
    armed indicator color, button actions and tick the phones that should get
    notifications → **Save settings**
 5. **Schedule** tab → optionally set auto-arm/disarm times per weekday

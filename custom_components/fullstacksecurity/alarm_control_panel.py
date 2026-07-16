@@ -36,6 +36,8 @@ from .const import (
     CONF_BUTTON_TRIPLE,
     CONF_BUTTONS,
     CONF_CRITICAL_ALERTS,
+    CONF_DEVICE_NAMES,
+    CONF_DEVICE_ZONES,
     CONF_MQTT_BUTTONS,
     CONF_DOORS,
     CONF_ENTRY_DELAY,
@@ -53,6 +55,7 @@ from .const import (
     CONF_SCHEDULES_ENABLED,
     CONF_SIREN_DURATION,
     CONF_SIREN_TONE,
+    CONF_SIREN_TONES,
     CONF_SIREN_VOLUME,
     CONF_SIRENS,
     CONF_VIBRATION,
@@ -152,11 +155,41 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
         self._lights: list[str] = list(opt(options, CONF_LIGHTS))
         self._buttons: list[str] = list(opt(options, CONF_BUTTONS))
         self._mqtt_buttons: list[str] = list(opt(options, CONF_MQTT_BUTTONS))
+        saved_names = opt(options, CONF_DEVICE_NAMES)
+        self._device_names: dict[str, str] = (
+            {
+                entity_id: name
+                for entity_id, name in saved_names.items()
+                if isinstance(entity_id, str) and isinstance(name, str)
+            }
+            if isinstance(saved_names, dict)
+            else {}
+        )
+        saved_zones = opt(options, CONF_DEVICE_ZONES)
+        self._device_zones: dict[str, str] = (
+            {
+                entity_id: zone
+                for entity_id, zone in saved_zones.items()
+                if isinstance(entity_id, str) and isinstance(zone, str)
+            }
+            if isinstance(saved_zones, dict)
+            else {}
+        )
 
         self._arming_delay = int(opt(options, CONF_ARMING_DELAY))
         self._entry_delay = int(opt(options, CONF_ENTRY_DELAY))
         self._siren_duration = int(opt(options, CONF_SIREN_DURATION))
         self._siren_tone = str(opt(options, CONF_SIREN_TONE))
+        saved_siren_tones = opt(options, CONF_SIREN_TONES)
+        self._siren_tones: dict[str, str] = (
+            {
+                entity_id: tone
+                for entity_id, tone in saved_siren_tones.items()
+                if isinstance(entity_id, str) and isinstance(tone, str)
+            }
+            if isinstance(saved_siren_tones, dict)
+            else {}
+        )
         self._siren_volume = int(opt(options, CONF_SIREN_VOLUME))
         self._light_mode = str(opt(options, CONF_LIGHT_MODE))
         self._light_duration = int(opt(options, CONF_LIGHT_DURATION))
@@ -392,7 +425,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             self.hass.async_create_task(
                 async_sirens_on(
                     self.hass, self._sirens, self._siren_tone,
-                    self._siren_duration, self._siren_volume,
+                    self._siren_duration, self._siren_volume, self._siren_tones,
                 )
             )
 
@@ -457,10 +490,13 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
             "lights": self._lights,
             "buttons": self._buttons,
             "mqtt_buttons": self._mqtt_buttons,
+            "device_names": self._device_names,
+            "device_zones": self._device_zones,
             "arming_delay": self._arming_delay,
             "entry_delay": self._entry_delay,
             "siren_duration": self._siren_duration,
             "siren_tone": self._siren_tone,
+            "siren_tones": self._siren_tones,
             "siren_volume": self._siren_volume,
             "light_mode": self._light_mode,
             "light_duration": self._light_duration,
@@ -941,7 +977,7 @@ class FullStackSecurityAlarm(AlarmControlPanelEntity, RestoreEntity):
 
         await async_sirens_on(
             self.hass, self._sirens, self._siren_tone, self._siren_duration,
-            self._siren_volume,
+            self._siren_volume, self._siren_tones,
         )
         self._start_siren_loop()
 

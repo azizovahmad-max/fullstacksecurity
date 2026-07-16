@@ -21,6 +21,9 @@ from homeassistant.core import HomeAssistant, ServiceCall
 
 from .const import (
     DOMAIN,
+    CONF_DEVICE_NAMES,
+    CONF_DEVICE_ZONES,
+    CONF_SIREN_TONES,
     ENTITY_LIST_KEYS,
     EVENT_RUN_HEALTH_CHECK,
     PANEL_JS_URL,
@@ -148,6 +151,76 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 elif action == "remove" and entity_id in items:
                     items.remove(entity_id)
                 options[list_key] = items
+                if action == "add":
+                    zone = call.data.get("zone")
+                    if isinstance(zone, str) and zone.strip():
+                        zones = dict(options.get(CONF_DEVICE_ZONES) or {})
+                        zones[entity_id] = zone.strip()[:80]
+                        options[CONF_DEVICE_ZONES] = zones
+                else:
+                    names = dict(options.get(CONF_DEVICE_NAMES) or {})
+                    zones = dict(options.get(CONF_DEVICE_ZONES) or {})
+                    siren_tones = dict(options.get(CONF_SIREN_TONES) or {})
+                    names.pop(entity_id, None)
+                    zones.pop(entity_id, None)
+                    siren_tones.pop(entity_id, None)
+                    options[CONF_DEVICE_NAMES] = names
+                    options[CONF_DEVICE_ZONES] = zones
+                    options[CONF_SIREN_TONES] = siren_tones
+            elif action == "rename":
+                entity_id = call.data.get("entity_id")
+                name = call.data.get("name", "")
+                configured = {
+                    entity
+                    for key in ENTITY_LIST_KEYS
+                    for entity in (options.get(key) or [])
+                }
+                if not isinstance(entity_id, str) or entity_id not in configured:
+                    _LOGGER.warning("update_config ignored: unknown entity %s", entity_id)
+                    return
+                if not isinstance(name, str):
+                    _LOGGER.warning("update_config ignored: non-string device name")
+                    return
+                names = dict(options.get(CONF_DEVICE_NAMES) or {})
+                name = name.strip()[:80]
+                if name:
+                    names[entity_id] = name
+                else:
+                    names.pop(entity_id, None)
+                options[CONF_DEVICE_NAMES] = names
+            elif action == "discover":
+                devices = call.data.get("devices")
+                zones = call.data.get("zones") or {}
+                if not isinstance(devices, dict) or not isinstance(zones, dict):
+                    _LOGGER.warning("update_config ignored: malformed discovery payload")
+                    return
+                added: set[str] = set()
+                configured = {
+                    entity
+                    for key in ENTITY_LIST_KEYS
+                    for entity in (options.get(key) or [])
+                }
+                for list_key in ENTITY_LIST_KEYS:
+                    candidates = devices.get(list_key, [])
+                    if not isinstance(candidates, list):
+                        continue
+                    items = list(options.get(list_key) or [])
+                    for entity_id in candidates:
+                        if (
+                            isinstance(entity_id, str)
+                            and "." in entity_id
+                            and entity_id not in configured
+                        ):
+                            items.append(entity_id)
+                            added.add(entity_id)
+                            configured.add(entity_id)
+                    options[list_key] = items
+                saved_zones = dict(options.get(CONF_DEVICE_ZONES) or {})
+                for entity_id in added:
+                    zone = zones.get(entity_id)
+                    if isinstance(zone, str) and zone.strip():
+                        saved_zones[entity_id] = zone.strip()[:80]
+                options[CONF_DEVICE_ZONES] = saved_zones
             elif action == "settings":
                 for key in SETTINGS_KEYS:
                     if key in call.data:

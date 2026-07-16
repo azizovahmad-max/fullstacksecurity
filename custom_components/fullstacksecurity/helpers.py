@@ -98,18 +98,22 @@ async def async_sirens_on(
     tone: str,
     duration: int,
     volume: int = 100,
+    siren_tones: dict[str, str] | None = None,
 ) -> None:
-    """Turn on sirens; real siren entities get tone/duration/volume, switches a plain on.
+    """Turn on sirens, using a configured tone for each real siren.
 
     volume is a percentage (0-100) mapped to siren volume_level (0.0-1.0).
     """
     real_sirens = [e for e in sirens if e.startswith("siren.")]
     others = [e for e in sirens if not e.startswith("siren.")]
 
-    if real_sirens:
-        data: dict = {ATTR_ENTITY_ID: real_sirens}
-        if tone:
-            data["tone"] = tone
+    # The siren service accepts one tone per call. Calling each device also
+    # prevents one model's tone list from leaking into another model.
+    for entity_id in real_sirens:
+        data: dict = {ATTR_ENTITY_ID: entity_id}
+        selected_tone = (siren_tones or {}).get(entity_id) or tone
+        if selected_tone:
+            data["tone"] = selected_tone
         if duration:
             data["duration"] = duration
         if volume is not None and int(volume) < 100:
@@ -117,9 +121,13 @@ async def async_sirens_on(
         try:
             await hass.services.async_call("siren", "turn_on", data, blocking=False)
         except Exception as err:  # noqa: BLE001 - some sirens reject tone/duration
-            _LOGGER.warning("siren.turn_on with options failed (%s), retrying plain", err)
+            _LOGGER.warning(
+                "siren.turn_on with options failed for %s (%s), retrying plain",
+                entity_id,
+                err,
+            )
             await hass.services.async_call(
-                "siren", "turn_on", {ATTR_ENTITY_ID: real_sirens}, blocking=False
+                "siren", "turn_on", {ATTR_ENTITY_ID: entity_id}, blocking=False
             )
     if others:
         await hass.services.async_call(

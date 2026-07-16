@@ -30,6 +30,7 @@ from .const import (
     CONF_FLOOD_SIREN,
     CONF_SIREN_DURATION,
     CONF_SIREN_TONE,
+    CONF_SIREN_TONES,
     CONF_SIREN_VOLUME,
     CONF_SIRENS,
     EVENT_FLOOD,
@@ -67,6 +68,16 @@ class FloodAlertSensor(BinarySensorEntity):
         self._flood: list[str] = list(opt(options, CONF_FLOOD))
         self._sirens: list[str] = list(opt(options, CONF_SIRENS))
         self._siren_tone = str(opt(options, CONF_SIREN_TONE))
+        saved_siren_tones = opt(options, CONF_SIREN_TONES)
+        self._siren_tones: dict[str, str] = (
+            {
+                entity_id: tone
+                for entity_id, tone in saved_siren_tones.items()
+                if isinstance(entity_id, str) and isinstance(tone, str)
+            }
+            if isinstance(saved_siren_tones, dict)
+            else {}
+        )
         self._siren_duration = int(opt(options, CONF_SIREN_DURATION))
         self._siren_volume = int(opt(options, CONF_SIREN_VOLUME))
         self._flood_siren = bool(opt(options, CONF_FLOOD_SIREN))
@@ -133,7 +144,7 @@ class FloodAlertSensor(BinarySensorEntity):
             self.hass.async_create_task(
                 async_sirens_on(
                     self.hass, self._sirens, self._siren_tone,
-                    self._siren_duration, self._siren_volume,
+                    self._siren_duration, self._siren_volume, self._siren_tones,
                 )
             )
 
@@ -178,7 +189,7 @@ class FloodAlertSensor(BinarySensorEntity):
             self._siren_started = True
             await async_sirens_on(
                 self.hass, self._sirens, self._siren_tone, self._siren_duration,
-                self._siren_volume,
+                self._siren_volume, self._siren_tones,
             )
             self._start_siren_loop()
 

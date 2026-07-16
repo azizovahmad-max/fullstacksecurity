@@ -6,7 +6,7 @@ update_config:
   fields:
     action:
       name: Action
-      description: One of add, remove, settings or health_check.
+      description: One of add, remove, rename, discover, settings or health_check.
       required: true
       example: add
       selector:
@@ -14,6 +14,8 @@ update_config:
           options:
             - add
             - remove
+            - rename
+            - discover
             - settings
             - health_check
     type:
@@ -35,3 +37,18 @@ update_config:
       example: binary_sensor.front_door_contact
       selector:
         entity: {}
+    name:
+      name: Security display name
+      description: Local display name used by the Security panel (for rename).
+      selector:
+        text: {}
+    devices:
+      name: Discovered devices
+      description: Device lists supplied by the Security panel (for discover).
+      selector:
+        object: {}
+    zones:
+      name: Discovered zones
+      description: Entity-to-area mapping supplied by the Security panel (for discover).
+      selector:
+        object: {}

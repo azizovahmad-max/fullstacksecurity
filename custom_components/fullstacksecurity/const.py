@@ -1,7 +1,7 @@
 """Constants for the FullStack Security integration."""
 
 DOMAIN = "fullstacksecurity"
-VERSION = "2.12.0"
+VERSION = "2.13.0"
 
 PANEL_URL_PATH = "fullstacksecurity"
 PANEL_NAME = "fullstacksecurity-panel"
@@ -23,6 +23,10 @@ CONF_LIGHTS = "lights"
 CONF_ARMED_LIGHTS = "armed_lights"
 CONF_BUTTONS = "buttons"
 CONF_MQTT_BUTTONS = "mqtt_buttons"
+# Display labels and areas are local to FullStack Security. They never rename
+# the original Home Assistant entities.
+CONF_DEVICE_NAMES = "device_names"
+CONF_DEVICE_ZONES = "device_zones"
 
 ENTITY_LIST_KEYS = (
     CONF_DOORS,
@@ -39,6 +43,7 @@ CONF_ARMING_DELAY = "arming_delay"
 CONF_ENTRY_DELAY = "entry_delay"
 CONF_SIREN_DURATION = "siren_duration"
 CONF_SIREN_TONE = "siren_tone"
+CONF_SIREN_TONES = "siren_tones"
 CONF_SIREN_VOLUME = "siren_volume"
 CONF_LIGHT_MODE = "light_mode"
 CONF_LIGHT_DURATION = "light_duration"
@@ -66,6 +71,7 @@ SETTINGS_KEYS = (
     CONF_ENTRY_DELAY,
     CONF_SIREN_DURATION,
     CONF_SIREN_TONE,
+    CONF_SIREN_TONES,
     CONF_SIREN_VOLUME,
     CONF_LIGHT_MODE,
     CONF_LIGHT_DURATION,
@@ -99,10 +105,13 @@ DEFAULTS = {
     CONF_LIGHTS: [],
     CONF_BUTTONS: [],
     CONF_MQTT_BUTTONS: [],
+    CONF_DEVICE_NAMES: {},
+    CONF_DEVICE_ZONES: {},
     CONF_ARMING_DELAY: 30,
     CONF_ENTRY_DELAY: 30,
     CONF_SIREN_DURATION: 0,
     CONF_SIREN_TONE: "",
+    CONF_SIREN_TONES: {},
     CONF_SIREN_VOLUME: 100,
     CONF_LIGHT_MODE: "flash_long",
     CONF_LIGHT_DURATION: 0,
